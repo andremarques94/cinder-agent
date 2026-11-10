@@ -60,4 +60,5 @@ vp run dev
 ```
 
 Sandboxes are at `http://me.localhost:8787`. `vp check` and `vp run -r test` run the checks and
-tests. Code layout: [apps/gateway/README.md](apps/gateway/README.md).
+tests; `vp install` also sets up a pre-commit hook that runs `vp check --fix` on staged files.
+Code layout: [apps/gateway/README.md](apps/gateway/README.md).

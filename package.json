@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prepare": "vp config",
     "ready": "vp check && vp run -r test",
     "dev": "vp run gateway#dev",
     "deploy": "vp run gateway#deploy"

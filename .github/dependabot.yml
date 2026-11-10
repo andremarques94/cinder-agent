@@ -1,0 +1,32 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "@opencode/client"
+    groups:
+      vite-plus:
+        patterns: ["vite-plus", "@voidzero-dev/*"]
+      cloudflare:
+        patterns: ["wrangler", "@cloudflare/*"]
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: docker
+    directory: /sandbox
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
