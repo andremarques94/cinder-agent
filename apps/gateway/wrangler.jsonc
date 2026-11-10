@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cinder-agent-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-10",
+  "upload_source_maps": true,
+  "observability": { "enabled": true },
+
+  "vars": {
+    "SANDBOX_DOMAIN": "example.com",
+    "SANDBOXES": "me",
+    "OPENCODE_INSTANCE": "standard-1",
+    "INACTIVITY_TIMEOUT_MINUTES": "30",
+  },
+  "secrets": {
+    "required": ["ADMIN_TOKEN"],
+  },
+
+  "routes": [{ "pattern": "*.example.com/*", "zone_name": "example.com" }],
+  "workers_dev": true,
+
+  "containers": [
+    {
+      "class_name": "OpencodeSandbox",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "opencode": { "dockerfile": "../../sandbox/Dockerfile", "build_context": "../../sandbox" },
+      },
+    },
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "OPENCODE_SANDBOX", "class_name": "OpencodeSandbox" }],
+  },
+  "exports": {
+    "OpencodeSandbox": { "type": "durable-object", "storage": "sqlite" },
+  },
+}
