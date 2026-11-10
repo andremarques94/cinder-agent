@@ -60,7 +60,4 @@ vp run dev
 ```
 
 Sandboxes are at `http://me.localhost:8787`. `vp check` and `vp run -r test` run the checks and
-tests; `vp install` also sets up a pre-commit hook that runs `vp check --fix` on staged files.
-Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`,
-`fix:`, …); releases and the changelog are generated from them by release-please.
-Code layout: [apps/gateway/README.md](apps/gateway/README.md).
+tests. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
