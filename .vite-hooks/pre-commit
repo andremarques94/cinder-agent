@@ -1,1 +1,2 @@
+gitleaks git --staged --redact --no-banner
 vp staged

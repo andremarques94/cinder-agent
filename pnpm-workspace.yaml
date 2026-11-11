@@ -16,6 +16,7 @@ catalog:
   vite-plus: 1.5.1
   wrangler: 4.158.0
   "@octokit/auth-app": 8.3.1
+  knip: 6.44.2
 overrides:
   vite@*: "catalog:"
 peerDependencyRules:

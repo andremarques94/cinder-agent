@@ -18,6 +18,7 @@ lost if the container dies unexpectedly.
 - Cloudflare account on the Workers Paid plan (needed for Containers)
 - A domain on Cloudflare
 - Docker
+- [Gitleaks](https://github.com/gitleaks/gitleaks) (`brew install gitleaks`), used by the pre-commit hook
 - [Vite+](https://viteplus.dev) (`vp`)
 
 ## Deploy
@@ -94,5 +95,5 @@ cp apps/gateway/.dev.vars.example apps/gateway/.dev.vars
 vp run dev
 ```
 
-Sandboxes are at `http://me.localhost:8787`. `vp check` and `vp run -r test` run the checks and
+Sandboxes are at `http://me.localhost:8787`. `vp run ready` runs the checks, [knip](https://knip.dev) and the
 tests. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.

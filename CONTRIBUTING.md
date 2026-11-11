@@ -3,7 +3,8 @@
 ## Setup
 
 Follow the requirements and local development steps in the [README](README.md). `vp install`
-also installs the git hooks: one formats and checks staged files, one checks commit messages.
+also installs the git hooks: one scans staged files for secrets with Gitleaks, then formats and
+checks them; one checks commit messages.
 
 ## Branches
 
@@ -48,7 +49,7 @@ The `commit-msg` hook rejects messages that don't follow this.
 - Keep one change per pull request.
 - Use a commit-style title. Pull requests are squash-merged, so the title becomes the commit
   message.
-- `vp check` and `vp run -r test` must pass; CI runs both.
+- `vp run ready` (checks, knip, tests) must pass. CI runs the same checks, plus Gitleaks on the whole history.
 - Follow the code rules in [apps/gateway/README.md](apps/gateway/README.md).
 
 ## Releases

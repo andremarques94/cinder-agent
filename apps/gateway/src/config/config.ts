@@ -82,7 +82,6 @@ const ConfigSchema = v.pipe(
 
 export type Config = ReturnType<typeof loadConfig>;
 export type GithubConfig = NonNullable<Config["github"]>;
-export type InstanceType = Config["instance"];
 
 export function loadConfig(env: unknown) {
   return { ...v.parse(ConfigSchema, env), github: v.parse(GithubSchema, env) };
