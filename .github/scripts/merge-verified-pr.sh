@@ -10,4 +10,4 @@ if [[ "${current}" != "${EXPECTED_HEAD_SHA}" ]]; then
   echo "The pull request changed after CI; refusing to merge." >&2
   exit 1
 fi
-gh pr merge "${PR_URL}" --squash --delete-branch
+gh pr merge "${PR_URL}" --squash --delete-branch --match-head-commit "${EXPECTED_HEAD_SHA}"

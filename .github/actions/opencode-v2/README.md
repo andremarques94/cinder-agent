@@ -137,10 +137,10 @@ steps:
 
 ### Outputs
 
-| Output     | Meaning                                          |
-| ---------- | ------------------------------------------------ |
-| `head-ref` | Validated same-repository PR branch              |
-| `head-sha` | PR head SHA after any OpenCode commit was pushed |
+| Output     | Meaning                                                                                                         |
+| ---------- | --------------------------------------------------------------------------------------------------------------- |
+| `head-ref` | Validated same-repository PR branch                                                                             |
+| `head-sha` | The commit OpenCode reviewed, or its own commit if it pushed one; the step fails if the PR moved during the run |
 
 When updating OpenCode, update `version` and `sha256` together from the official release
 and its `SHA256SUMS` asset.
