@@ -2,6 +2,7 @@
 set -u
 
 name="${1:-me}"
+email="${EMAIL:-me@example.com}"
 port="${PORT:-8787}"
 dev_vars="$(dirname "$0")/../apps/gateway/.dev.vars"
 token="${ADMIN_TOKEN:-$(sed -n 's/^ADMIN_TOKEN=//p' "$dev_vars" 2>/dev/null)}"
@@ -22,6 +23,16 @@ in_container() {
   docker exec "$container" sh -c "$1"
 }
 
+invite="$(curl -sS -m 30 -o /dev/null -w '%{http_code}' -X POST \
+  -H "Authorization: Bearer $token" -H 'content-type: application/json' \
+  -d "{\"email\":\"$email\",\"sandbox\":\"$name\"}" "http://localhost:$port/admin/users")"
+check "$email is invited as $name" sh -c "[ '$invite' = 201 ] || [ '$invite' = 409 ]"
+if [ "$email" = me@example.com ]; then
+  check "app.localhost:$port signs in as $email and shows $name" \
+    sh -c "curl -fsS -m 30 http://app.localhost:$port/api/me | grep -q '\"sandbox\":\"$name\"'"
+else
+  echo "skip  app.localhost (access.dev in wrangler.jsonc signs in as me@example.com)"
+fi
 check "sandbox answers at $name.localhost:$port" \
   curl -fsS -m 180 -o /dev/null "http://$name.localhost:$port/"
 check "admin status reports ready" \

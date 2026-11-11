@@ -167,8 +167,10 @@ Use `wrangler` (Workers Paid plan required for Sandbox/Containers), TypeScript t
 - App, install flow, token minting, outbound swap; clone + push + open PR.
 - ✅ From the OpenCode UI: "add a README section and open a PR" produces a PR authored by the app.
 
-**M3 — Multi-user**
+**M3 — Multi-user** — done
 - Access (GitHub IdP), D1 users, DO per user, per-user subdomain + password.
+- Implemented: Access protects only `app.<domain>`; the gateway reads the email from `ctx.access` (checked against `ACCESS_AUD`) and needs a D1 invite too. The admin invites users with an email and a sandbox name (`POST /admin/users`) and links one GitHub App installation per user. The Durable Object is named by the user's random ID, so the subdomain never picks it directly; deleted users' sandbox names are retired, never reused. The OpenCode password stays in each user's Durable Object storage; backups are under `sandboxes/<userId>/`.
+- Deferred to M4: self-service GitHub App install (needs GitHub user OAuth to prove who owns an installation), more than one installation per user (needs picking a token by repository owner), and Access JWT checks for when the dashboard uses Static Assets (`ctx.access` isn't passed there).
 - ✅ Second account gets its own sandbox; isolation tests pass (A cannot reach B).
 
 **M4 — Dashboard**

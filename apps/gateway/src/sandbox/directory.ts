@@ -7,23 +7,25 @@ export interface SandboxHandle {
   pair(): Promise<PairingCode>;
   status(): Promise<ServerStatus>;
   stop(): Promise<void>;
+  destroy(): Promise<void>;
 }
 
 export interface SandboxDirectory {
-  get(name: string): SandboxHandle;
+  get(userId: string): SandboxHandle;
 }
 
 export function durableObjectDirectory(
   namespace: DurableObjectNamespace<OpencodeSandbox>,
 ): SandboxDirectory {
   return {
-    get(name) {
-      const stub = namespace.getByName(name);
+    get(userId) {
+      const stub = namespace.getByName(userId);
       return {
         fetch: (request) => stub.fetch(toContainerRequest(request)),
         pair: () => stub.pair(),
         status: () => stub.status(),
         stop: () => stub.stop(),
+        destroy: () => stub.destroy(),
       };
     },
   };

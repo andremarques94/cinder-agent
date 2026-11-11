@@ -29,7 +29,7 @@ const tokenResponse = () =>
 
 test("installation tokens are minted with the app JWT and cached", async () => {
   const calls = stubGithub({ "POST /app/installations/34/access_tokens": tokenResponse });
-  const app = githubApp({ appId: 1, installationId: 34, privateKey });
+  const app = githubApp({ appId: 1, privateKey });
 
   expect(await app.installationToken(34)).toBe("ghs_real");
   expect(await app.installationToken(34)).toBe("ghs_real");
@@ -42,7 +42,7 @@ test("the bot identity comes from the app slug and its bot user", async () => {
     "GET /app": () => Response.json({ slug: "cinder" }),
     "GET /users/cinder%5Bbot%5D": () => Response.json({ id: 99 }),
   });
-  const app = githubApp({ appId: 2, installationId: 34, privateKey });
+  const app = githubApp({ appId: 2, privateKey });
 
   expect(await app.botIdentity(34)).toEqual({
     name: "cinder[bot]",
@@ -52,7 +52,7 @@ test("the bot identity comes from the app slug and its bot user", async () => {
 
 test("GitHub refusing the credentials is a github_unavailable error", async () => {
   stubGithub({});
-  const app = githubApp({ appId: 3, installationId: 34, privateKey });
+  const app = githubApp({ appId: 3, privateKey });
 
   const error = await app.installationToken(34).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(GatewayError);

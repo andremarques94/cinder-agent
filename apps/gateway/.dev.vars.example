@@ -1,6 +1,7 @@
 SANDBOX_DOMAIN=localhost
 ADMIN_TOKEN=dev-admin-token-change-me
+# Matches access.dev.aud in wrangler.jsonc
+ACCESS_AUD=local-dev
 # Optional, see "GitHub" in the README
 GITHUB_APP_ID=
-GITHUB_INSTALLATION_ID=
 GITHUB_APP_PRIVATE_KEY=

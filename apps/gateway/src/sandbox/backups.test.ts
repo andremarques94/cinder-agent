@@ -32,6 +32,7 @@ function setup(stored: Record<string, unknown> = {}) {
     put: async (key, value) => {
       values.set(key, value);
     },
+    delete: async (key) => values.delete(key),
   };
   return { backups: new WorkspaceBackups(store, records, () => 1_000), calls, values };
 }
@@ -67,4 +68,14 @@ test("a corrupted record is an error, not an empty sandbox that could overwrite 
   await expect(backups.restoreLatest()).rejects.toThrow();
   await expect(backups.save()).rejects.toThrow();
   expect(calls).toEqual([]);
+});
+
+test("deleteLatest removes the backup and its record, so a revoked user leaves nothing behind", async () => {
+  const { backups, calls, values } = setup();
+  await backups.deleteLatest();
+  await backups.save();
+  await backups.deleteLatest();
+  expect(calls).toEqual(["backup /persist", "delete b1"]);
+  expect(values.has("backup")).toBe(false);
+  expect(await backups.latest()).toBeNull();
 });
