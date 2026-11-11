@@ -11,6 +11,41 @@ A sandbox stops after 30 minutes idle by default. Before it stops, its files, se
 logins are backed up to R2 and restored on the next start. Changes made since the last stop are
 lost if the container dies unexpectedly.
 
+## Architecture
+
+```mermaid
+flowchart LR
+  clients["Browser, phone,<br/>OpenCode desktop app"]
+  admin["Admin<br/>(curl + ADMIN_TOKEN)"]
+
+  subgraph cf["Cloudflare"]
+    gateway["Gateway Worker<br/>(apps/gateway)"]
+    subgraph sandbox["One per sandbox name"]
+      durable["OpencodeSandbox<br/>Durable Object"]
+      container["Container<br/>opencode serve, git, gh"]
+    end
+    outbound["GithubOutbound<br/>(adds the App token)"]
+    backup["DirectoryBackupGateway"]
+    r2[("R2<br/>backups")]
+  end
+
+  github["GitHub"]
+
+  clients -- "name.your-domain" --> gateway
+  admin -- "/admin" --> gateway
+  gateway --> durable
+  durable -- "proxy, start, stop" --> container
+  container -- "HTTPS to github.com,<br/>api.github.com" --> outbound
+  outbound --> github
+  container -- "/persist backup<br/>and restore" --> backup
+  backup --> r2
+```
+
+The gateway routes `<name>.<domain>` to that sandbox's Durable Object, which starts the container,
+restores `/persist` from R2 and proxies requests to `opencode serve`. The container only has a
+placeholder GitHub token; its traffic to GitHub goes through `GithubOutbound`, which adds a
+short-lived installation token.
+
 **Work in progress.** See [PLAN.md](PLAN.md) for what's next.
 
 ## Requirements
