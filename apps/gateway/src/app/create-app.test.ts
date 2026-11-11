@@ -20,13 +20,16 @@ const config: Config = {
   inactivityTimeoutMs: 60_000,
   adminToken: TOKEN,
   accessAud: AUD,
+  accessTeamDomain: undefined,
   github: null,
+  githubSignIn: null,
 };
 
 interface Options {
   failPairing?: boolean;
   pairingCode?: string;
   config?: Partial<Config>;
+  fetch?: typeof fetch;
 }
 
 async function gateway(options: Options = {}) {
@@ -61,7 +64,12 @@ async function gateway(options: Options = {}) {
     };
   };
   const sandboxes: SandboxDirectory = { get: handle };
-  const app = createApp(() => ({ config: { ...config, ...options.config }, sandboxes, users }));
+  const app = createApp(() => ({
+    config: { ...config, ...options.config },
+    sandboxes,
+    users,
+    fetch: options.fetch ?? noNetwork,
+  }));
   return { app, calls, users, ada, bob };
 }
 
@@ -74,6 +82,10 @@ function signedIn(email: string | undefined, aud = AUD): ExecutionContext {
   };
   return ctx;
 }
+
+const noNetwork: typeof fetch = async (input) => {
+  throw new Error(`unexpected fetch: ${input instanceof Request ? input.url : input.toString()}`);
+};
 
 const bearer = (token: string) => ({ headers: { authorization: `Bearer ${token}` } });
 const post = (init: RequestInit = {}) => ({ ...init, method: "POST" });
@@ -183,11 +195,11 @@ describe("signed-in app", () => {
     expect(calls).toEqual(["ada pair"]);
   });
 
-  test("the pair form redirects to the link; another site can't submit it", async () => {
+  test("the pair form shows a QR code of the link; another site can't submit it", async () => {
     const { app, calls } = await gateway();
     const form = (origin: string) =>
       app.request(
-        `${APP}/pair`,
+        `${APP}/devices/pair`,
         post({
           headers: { "content-type": "application/x-www-form-urlencoded", origin },
           body: "",
@@ -197,8 +209,12 @@ describe("signed-in app", () => {
       );
 
     const ours = await form(APP);
-    expect(ours.status).toBe(303);
-    expect(ours.headers.get("location")).toBe("https://bob.example.com/auth/connect/one-time-code");
+    expect(ours.status).toBe(200);
+    expect(ours.headers.get("cache-control")).toBe("no-store");
+    const page = await ours.text();
+    expect(page).toContain("<svg");
+    expect(page).toContain("https://bob.example.com/auth/connect/one-time-code");
+    expect(page).toContain("expires in 5 minutes");
 
     const theirs = await form("https://evil.test");
     expect(theirs.status).toBe(403);
@@ -206,11 +222,56 @@ describe("signed-in app", () => {
     expect(calls).toEqual(["bob pair"]);
   });
 
-  test("the home page names the user's server", async () => {
-    const { app } = await gateway();
+  test("the home page shows the user's server, status and GitHub links", async () => {
+    const { app, users, ada } = await gateway();
+    await users.claimInstallation(ada.id, 41, "ada-org");
+    await users.linkGithubAccount(ada.id, { githubUserId: 1, login: "ada-gh" });
     const page = await app.request(`${APP}/`, {}, undefined, signedIn("ada@example.com"));
     expect(page.headers.get("content-type")).toContain("text/html");
-    expect(await page.text()).toContain('<a href="https://ada.example.com">');
+    const html = await page.text();
+    expect(html).toContain('<a href="https://ada.example.com">');
+    expect(html).toContain('action="/devices/pair"');
+    expect(html).toContain("ada-gh");
+    expect(html).toContain('action="/github/installations/41/delete"');
+    expect(html).toContain("running");
+    expect(html).toContain("2.2.7");
+    expect(html).toContain("GitHub isn&#39;t set up on this gateway.");
+  });
+
+  test("the home page still renders when the sandbox can't report its status", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { users } = await gateway();
+    const down = () => Promise.reject(new Error("down"));
+    const app = createApp(() => ({
+      config,
+      users,
+      fetch: noNetwork,
+      sandboxes: {
+        get: () => ({ fetch: down, pair: down, status: down, stop: down, destroy: down }),
+      },
+    }));
+    const page = await app.request(`${APP}/`, {}, undefined, signedIn("ada@example.com"));
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("unavailable");
+  });
+
+  test("browsers get an HTML error page, other clients JSON", async () => {
+    const { app } = await gateway();
+    const html = await app.request(
+      `${APP}/github/install`,
+      { headers: { accept: "text/html" } },
+      undefined,
+      signedIn("ada@example.com"),
+    );
+    expect(html.status).toBe(404);
+    expect(await html.text()).toContain("GitHub sign-in is not set up on this gateway.");
+    const json = await app.request(
+      `${APP}/github/install`,
+      {},
+      undefined,
+      signedIn("ada@example.com"),
+    );
+    expect(await json.json()).toMatchObject({ error: "github_sign_in_not_configured" });
   });
 
   test("records the sign-in", async () => {
@@ -343,6 +404,7 @@ describe("admin API", () => {
     const broken = createApp(() => ({
       config,
       users,
+      fetch: noNetwork,
       sandboxes: {
         get: () => ({ fetch: down, pair: down, status: down, stop: down, destroy: down }),
       },
@@ -352,13 +414,16 @@ describe("admin API", () => {
     expect(await users.byId(ada.id)).not.toBeNull();
   });
 
-  test("links a GitHub App installation to one user", async () => {
+  test("links GitHub App installations to one user each", async () => {
     const { app, users, ada, bob } = await gateway();
     const link = (user: User, body: unknown) =>
       app.request(`${ADMIN}/admin/users/${user.id}/github`, json("PUT", body));
+    const ids = async (user: User) =>
+      (await users.installations(user.id)).map((installation) => installation.installationId);
 
     expect((await link(ada, { installationId: 34, accountLogin: "ada" })).status).toBe(204);
-    expect((await users.byId(ada.id))?.installationId).toBe(34);
+    expect((await link(ada, { installationId: 35, accountLogin: "ada-org" })).status).toBe(204);
+    expect(await ids(ada)).toEqual([34, 35]);
     expect((await link(bob, { installationId: 34 })).status).toBe(409);
     expect((await link(bob, { installationId: "34" })).status).toBe(400);
     expect((await link(bob, { installationId: 0 })).status).toBe(400);
@@ -367,18 +432,18 @@ describe("admin API", () => {
     expect(
       v
         .parse(
-          v.array(v.object({ sandbox: v.string(), installationId: v.nullable(v.number()) })),
+          v.array(v.object({ sandbox: v.string(), installationIds: v.array(v.number()) })),
           await list.json(),
         )
-        .map((user) => [user.sandbox, user.installationId]),
+        .map((user) => [user.sandbox, user.installationIds]),
     ).toEqual([
-      ["ada", 34],
-      ["bob", null],
+      ["ada", [34, 35]],
+      ["bob", []],
     ]);
 
     const cleared = await app.request(`${ADMIN}/admin/users/${ada.id}/github`, json("DELETE", {}));
     expect(cleared.status).toBe(204);
-    expect((await users.byId(ada.id))?.installationId).toBeNull();
+    expect(await ids(ada)).toEqual([]);
     expect(
       (await app.request(`${ADMIN}/admin/users/missing/github`, json("PUT", { installationId: 1 })))
         .status,

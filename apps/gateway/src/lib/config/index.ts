@@ -1,1 +1,1 @@
-export { loadConfig, type Config, type GithubConfig } from "./config.ts";
+export { loadConfig, type Config, type GithubConfig, type GithubSignInConfig } from "./config.ts";

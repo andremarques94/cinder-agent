@@ -5,11 +5,13 @@ src/
   index.ts                Worker entry: bindings → deps; exports the Durable Object and entrypoints
   app/                    Top-level Hono app: picks a sub-app by hostname, turns errors into responses
     hosts/                Hostname → sandbox, app or gateway
-  account/                app.<domain>, behind Cloudflare Access
-    access/               ctx.access → email
-    home/                 GET /
+  account/                app.<domain>, behind Cloudflare Access; server-rendered Hono JSX
+    layout.tsx            Page layout and error page
+    access/               ctx.access, or the Access JWT, → email
+    home/                 GET /: Devices, GitHub, Settings
     me/                   GET /api/me
-    pairing/              POST /api/pair, POST /pair
+    pairing/              POST /api/pair, POST /devices/pair (QR code)
+    github/               /github: App install, user OAuth, linking and unlinking installations
   admin/                  /admin, behind ADMIN_TOKEN
     users/                /admin/users, /admin/users/:id/github
     sandboxes/            /admin/sandboxes/:name: pair, status, stop
@@ -25,7 +27,7 @@ src/
     container/            Ports, paths, env and commands inside the container
     proxy/                HTTP and WebSocket proxying to opencode serve
     backups/              /persist backups in R2
-    github/               GitHub App tokens and the outbound handler that adds them
+    github/               GitHub App tokens and the outbound handler that picks one by repo owner
     pairing/              Pairing links
   lib/                    config, errors, log, http (imported as @/lib/<name>)
   testing/                Test-only: Drizzle on node:sqlite with the real migrations

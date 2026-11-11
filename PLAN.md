@@ -100,17 +100,20 @@ Legend: **purple = we build**, **teal = OpenCode as-is**, **gray = Cloudflare / 
 - **Webhooks**: verify signature → enqueue a Workflow.
 - **Never** proxy or log responses from `GET /api/credential` (it returns secrets) to dashboard code; strip/deny it for dashboard-originated calls.
 
-### 3.3 Dashboard (`apps/dashboard/`)
-React app on Workers static assets, behind Access. Uses `@opencode/client` (browser-compatible) through the gateway.
+### 3.3 Dashboard
+Behind Access on `app.<domain>`. Only what OpenCode's own apps don't do.
+
+**What the OpenCode apps cover.** The web UI, desktop app and iOS app ([opencode.ai/mobile](https://opencode.ai/mobile)) are one app (`packages/app` in the OpenCode repo; the iOS build is Tauri, origin `tauri://localhost`). It has projects, sessions (list, start, follow live, fork, revert), the composer with attachments, diffs and review, files, a terminal, MCP, models and provider connect, and several servers at once. So the dashboard has no Projects, Tasks or Open in OpenCode screens: start and follow work in the app.
+
+**Pairing the apps (verified with OpenCode 2.2.7).** The app reads either a link `https://<host>/auth/connect/<code>` or the `opencode pair` QR payload `{"code","urls":[...]}`, redeems the code with `GET /auth/connect/<code>` (`Accept: application/json` → `{token}`) and then sends `Basic opencode:<token>`. Our `POST /api/pair` already returns that link for `https://<name>.<domain>`, and the gateway passes `/auth/connect`, the token and CORS (OpenCode allows `tauri://localhost`) through unchanged, so the apps pair without OpenTunnel. `opencode pair --remote` only swaps the host for an OpenTunnel one, which wouldn't wake a sleeping sandbox.
 
 | Screen | Purpose | Backed by |
 | --- | --- | --- |
-| Projects | Connect a GitHub repo via our GitHub App; clone into the sandbox | GitHub App + sandbox exec |
-| Tasks | "Build X", "Review PR #12", "Fix issue #40" → creates an OpenCode session, live status | OpenCode session + event stream APIs |
-| Open in OpenCode | One click into the OpenCode web UI on that session | Deep link to `<user>.<domain>` |
-| Devices | QR / link to pair the desktop and mobile apps | OpenCode pairing (`POST /api/pair`) |
-| Models | Connect subscriptions/keys (see 3.4) | OpenCode integration API |
-| Settings / admin | Sandbox status (wake/sleep/snapshot), invite friends, allowlist | D1 + Access policy |
+| Devices | QR code and link to pair the phone and desktop apps | `POST /api/pair` |
+| GitHub | Install our GitHub App yourself; ownership proved by GitHub user OAuth; more than one installation per user | GitHub App + D1 |
+| Settings | Account (email, sandbox name, GitHub account) and sandbox status | D1 + Durable Object |
+
+Invites stay on the admin API (`/admin/users`); models stay in the OpenCode app (check its provider connect against §3.4 before M5).
 
 ### 3.4 Models — friends use their own subscriptions
 Logins are done by OpenCode itself and stored **inside that user's sandbox**.
@@ -125,7 +128,7 @@ Logins are done by OpenCode itself and stored **inside that user's sandbox**.
 
 ### 3.5 GitHub integration
 - **Our own GitHub App** (contents, pull requests, issues, checks). Each user installs it on their repos; installation ↔ user stored in D1.
-- Implemented (M2) without a plugin: the container gets a placeholder `GH_TOKEN`, and the gateway intercepts HTTPS to `github.com` and `api.github.com` and adds a short-lived installation token (`@octokit/auth-app`). Plain `git` and `gh pr create` cover clone, push and PRs, so an `open_pr` tool would only duplicate them. Single admin for now: App ID, installation ID and key are wrangler vars/secrets; per-user installations come with M3. Code-level push rules (permission hooks) are deferred to the outbound allowlist work.
+- Implemented (M2) without a plugin: the container gets a placeholder `GH_TOKEN`, and the gateway intercepts HTTPS to `github.com` and `api.github.com` and adds a short-lived installation token (`@octokit/auth-app`). Plain `git` and `gh pr create` cover clone, push and PRs, so an `open_pr` tool would only duplicate them. Installations are linked per user in D1 (M3 by the admin, M4 self-service with GitHub user OAuth), and the outbound handler picks one by repository owner. Code-level push rules (permission hooks) are deferred to the outbound allowlist work.
 - Phase 1: also enable OpenCode's built-in GitHub Action (`/opencode`, `/oc` comments, auto-review on PR open) on repos — zero code, runs in GitHub Actions.
 - Phase 2: our webhooks → **Workflow**: map repo → owning user → wake their sandbox → create session with the issue/PR context → prompt → wait → push branch / open or update PR / post review comment. Retries come from Workflows.
 
@@ -143,10 +146,8 @@ Logins are done by OpenCode itself and stored **inside that user's sandbox**.
 
 ## 5. Repo layout
 ```
-apps/dashboard      React UI (Workers static assets)
-apps/gateway        Worker: routing, dashboard API, pairing, webhooks, DOs, Workflows
+apps/gateway        Worker: routing, dashboard (server-rendered), pairing, webhooks, DOs, Workflows
 sandbox/            Dockerfile + OpenCode config (agents, skills, plugins, permissions)
-packages/shared     types shared by dashboard and gateway
 PLAN.md             this file
 ```
 Use `wrangler` (Workers Paid plan required for Sandbox/Containers), TypeScript throughout.
@@ -174,8 +175,12 @@ Use `wrangler` (Workers Paid plan required for Sandbox/Containers), TypeScript t
 - ✅ Second account gets its own sandbox; isolation tests pass (A cannot reach B).
 
 **M4 — Dashboard**
-- Projects, Tasks, Open in OpenCode, Devices, Settings.
-- ✅ Start a task from the dashboard on a phone, watch status, open it in the OpenCode UI.
+- Devices, GitHub and Settings (§3.3). Tasks are started and followed in the OpenCode app, which pairs with `<name>.<domain>` through the existing pairing route.
+- GitHub: self-service App install, ownership proved by GitHub user OAuth, more than one installation per user, and the installation token picked by repository owner.
+- Access JWT checks wherever the dashboard is served from Static Assets, since `ctx.access` isn't passed there.
+- ✅ Scan the Devices QR code with the iOS app, see the sandbox's sessions, start one and follow it from the phone.
+- ✅ Install the GitHub App on a second account from the dashboard; the sandbox pushes to repos in both.
+- Implemented: the dashboard is server-rendered Hono JSX in the gateway (plain forms, no client JavaScript, no Static Assets, so no separate `apps/dashboard`); the QR code is an SVG from `uqr`. `accessEmail` uses `ctx.access` when it's set and otherwise verifies `Cf-Access-Jwt-Assertion` against `ACCESS_TEAM_DOMAIN` (RS256, iss, aud), so adding Static Assets later only needs a client build. GitHub: install → Setup URL → user OAuth (state and PKCE in a `__Host-` cookie) → `GET /user/installations`; an installation is linked only if it's on the user's own account or an organization they're an admin of (needs the App's Members: read), and each installation belongs to one user. The user token is thrown away. `GithubOutbound` gets the user ID and picks the installation by repository owner (git and `/repos/{owner}` URLs), else the user's own account, else the oldest; GraphQL calls such as `gh pr create` fall back that way too.
 
 **M5 — Models screen**
 - ChatGPT headless sign-in, Go/Zen key, other keys.

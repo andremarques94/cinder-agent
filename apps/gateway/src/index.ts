@@ -10,4 +10,5 @@ export default createApp((env) => ({
   config: loadConfig(env),
   sandboxes: durableObjectDirectory(env.OPENCODE_SANDBOX),
   users: d1UserStore(env.DB),
+  fetch: (input, init) => fetch(input, init),
 }));

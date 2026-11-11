@@ -8,6 +8,13 @@
       "when": 1794397903119,
       "tag": "0000_users",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794412830486,
+      "tag": "0001_github_accounts",
+      "breakpoints": true
     }
   ]
 }

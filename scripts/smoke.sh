@@ -30,6 +30,10 @@ check "$email is invited as $name" sh -c "[ '$invite' = 201 ] || [ '$invite' = 4
 if [ "$email" = me@example.com ]; then
   check "app.localhost:$port signs in as $email and shows $name" \
     sh -c "curl -fsS -m 30 http://app.localhost:$port/api/me | grep -q '\"sandbox\":\"$name\"'"
+  check "the dashboard shows Devices, GitHub and Settings" \
+    sh -c "curl -fsS -m 30 http://app.localhost:$port/ | grep -q 'action=\"/devices/pair\"'"
+  check "Pair a device shows a QR code of a one-time link" \
+    sh -c "curl -fsS -m 180 -X POST -H 'Origin: http://app.localhost:$port' http://app.localhost:$port/devices/pair | grep -q '<svg.*/auth/connect/'"
 else
   echo "skip  app.localhost (access.dev in wrangler.jsonc signs in as me@example.com)"
 fi

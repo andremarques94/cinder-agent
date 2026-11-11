@@ -17,9 +17,6 @@ const STARTUP_DEADLINE_MS = 60_000;
 const READY_POLL_INTERVAL_MS = 500;
 const INFO_TIMEOUT_MS = 2_000;
 const IDLE_CHECK_INTERVAL_MS = 60_000;
-const INSTALLATION_KEY = "github-installation";
-
-const StoredInstallation = v.nullable(v.number());
 
 export type ServerConfig = Pick<Config, "instance" | "inactivityTimeoutMs" | "github">;
 
@@ -47,13 +44,14 @@ export class OpencodeServer {
     private readonly config: ServerConfig,
     private readonly backups: WorkspaceBackups,
     private readonly activity: Activity,
-    private readonly installation: () => Promise<number | null>,
+    private readonly userId: string,
+    private readonly identityInstallation: () => Promise<number | null>,
   ) {
     const container = ctx.container;
     if (container?.running) {
       void ctx.blockConcurrencyWhile(async () => {
         await container.setInactivityTimeout(this.safetyTimeoutMs());
-        await this.interceptGithub(container, await this.startedInstallation());
+        await this.interceptGithub(container);
       });
       this.watch(container);
     }
@@ -138,9 +136,7 @@ export class OpencodeServer {
     if (!container.running) {
       this.ready = false;
       this.destroying = false;
-      const installationId = await this.installation();
-      await this.ctx.storage.put(INSTALLATION_KEY, installationId);
-      const github = await this.connectGithub(container, installationId);
+      const github = await this.connectGithub(container);
       container.start({
         image: container.images.opencode,
         instance: this.config.instance,
@@ -181,13 +177,16 @@ export class OpencodeServer {
 
   private async connectGithub(
     container: Container,
-    installationId: number | null,
   ): Promise<{ identity: GitIdentity | null } | null> {
     const github = this.config.github;
-    if (!github || installationId === null) {
+    if (!github) {
       return null;
     }
-    await this.interceptGithub(container, installationId);
+    await this.interceptGithub(container);
+    const installationId = await this.identityInstallation();
+    if (installationId === null) {
+      return { identity: null };
+    }
     const identity = await githubApp(github)
       .botIdentity(installationId)
       .catch((error: unknown) => {
@@ -198,14 +197,11 @@ export class OpencodeServer {
   }
 
   // https://developers.cloudflare.com/containers/api/durable-object-container/
-  private async interceptGithub(
-    container: Container,
-    installationId: number | null,
-  ): Promise<void> {
-    if (!this.config.github || installationId === null) {
+  private async interceptGithub(container: Container): Promise<void> {
+    if (!this.config.github) {
       return;
     }
-    const outbound = this.ctx.exports.GithubOutbound({ props: { installationId } });
+    const outbound = this.ctx.exports.GithubOutbound({ props: { userId: this.userId } });
     for (const host of GITHUB_HOSTS) {
       await container.interceptOutboundHttps(host, outbound);
     }
@@ -283,11 +279,6 @@ export class OpencodeServer {
       .finally(() => {
         this.ready = false;
       });
-  }
-
-  private async startedInstallation(): Promise<number | null> {
-    const stored = v.safeParse(StoredInstallation, await this.ctx.storage.get(INSTALLATION_KEY));
-    return stored.success ? stored.output : null;
   }
 
   private async loadPassword(): Promise<string> {

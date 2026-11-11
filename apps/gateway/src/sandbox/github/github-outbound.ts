@@ -2,12 +2,13 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 
 import { loadConfig } from "@/lib/config";
 import { ErrorCode, GatewayError, errorResponse } from "@/lib/errors";
+import { d1UserStore } from "@/users";
 
 import { githubApp } from "./github-app.ts";
-import { authorizeGithubRequest } from "./outbound.ts";
+import { authorizeGithubRequest, pickInstallation } from "./outbound.ts";
 
 export interface GithubOutboundProps {
-  installationId: number;
+  userId: string;
 }
 
 // https://developers.cloudflare.com/containers/configuration/outbound-traffic/
@@ -19,9 +20,16 @@ export class GithubOutbound extends WorkerEntrypoint<Env, GithubOutboundProps> {
         throw new GatewayError(ErrorCode.GithubUnavailable);
       }
       const app = githubApp(github);
-      const authorized = await authorizeGithubRequest(request, () =>
-        app.installationToken(this.ctx.props.installationId),
-      );
+      const users = d1UserStore(this.env.DB);
+      const { userId } = this.ctx.props;
+      const authorized = await authorizeGithubRequest(request, async (owner) => {
+        const [installations, account] = await Promise.all([
+          users.installations(userId),
+          users.githubAccount(userId),
+        ]);
+        const installationId = pickInstallation(installations, owner, account?.login ?? null);
+        return installationId === null ? null : app.installationToken(installationId);
+      });
       return await fetch(authorized, { redirect: "manual" });
     } catch (error) {
       return errorResponse(error);
