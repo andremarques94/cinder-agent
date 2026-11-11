@@ -27,6 +27,7 @@ export type BackupStore = Pick<DirectoryBackup, "backup" | "restore" | "delete">
 export interface BackupRecordStore {
   get(key: string): Promise<unknown>;
   put(key: string, value: SavedBackup): Promise<void>;
+  delete(key: string): Promise<boolean>;
 }
 
 export class WorkspaceBackups {
@@ -59,5 +60,13 @@ export class WorkspaceBackups {
       });
     }
     return saved;
+  }
+
+  async deleteLatest(): Promise<void> {
+    const latest = await this.latest();
+    if (latest) {
+      await this.store.delete(latest.record);
+      await this.records.delete(SAVED_BACKUP_KEY);
+    }
   }
 }

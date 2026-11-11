@@ -2,7 +2,12 @@ import { HttpStatus } from "@/http";
 
 export const ErrorCode = {
   Unauthorized: "unauthorized",
+  NotSignedIn: "not_signed_in",
+  NotInvited: "not_invited",
+  CrossSiteRequest: "cross_site_request",
+  InvalidRequest: "invalid_request",
   NotFound: "not_found",
+  Conflict: "conflict",
   SandboxNotConfigured: "sandbox_not_configured",
   SandboxStartFailed: "sandbox_start_failed",
   SandboxStartTimeout: "sandbox_start_timeout",
@@ -23,7 +28,24 @@ interface ErrorDefinition {
 
 export const errorDefinitions: Record<ErrorCode, ErrorDefinition> = {
   unauthorized: { status: HttpStatus.Unauthorized, message: "Missing or invalid admin token." },
+  not_signed_in: {
+    status: HttpStatus.Unauthorized,
+    message: "Sign in through Cloudflare Access first.",
+  },
+  not_invited: {
+    status: HttpStatus.Forbidden,
+    message: "Your account has not been invited. Ask the admin for an invite.",
+  },
+  cross_site_request: {
+    status: HttpStatus.Forbidden,
+    message: "Requests from other sites are not allowed.",
+  },
+  invalid_request: { status: HttpStatus.BadRequest, message: "The request is not valid." },
   not_found: { status: HttpStatus.NotFound, message: "Not found." },
+  conflict: {
+    status: HttpStatus.Conflict,
+    message: "That email, sandbox name or installation is already taken.",
+  },
   sandbox_not_configured: {
     status: HttpStatus.InternalServerError,
     message: "No container is configured for this sandbox.",

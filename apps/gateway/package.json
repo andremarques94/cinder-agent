@@ -4,19 +4,22 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --infer-origin-from-routes=false",
+    "dev": "wrangler d1 migrations apply cinder-agent --local && wrangler dev --infer-origin-from-routes=false",
     "deploy": "wrangler deploy",
     "types": "wrangler types",
+    "db:generate": "drizzle-kit generate",
     "test": "vp test"
   },
   "dependencies": {
     "@cloudflare/sandbox": "catalog:",
     "@octokit/auth-app": "catalog:",
     "@opencode/client": "catalog:",
+    "drizzle-orm": "catalog:",
     "hono": "catalog:",
     "valibot": "catalog:"
   },
   "devDependencies": {
+    "drizzle-kit": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:",
     "wrangler": "catalog:"

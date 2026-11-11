@@ -1,4 +1,4 @@
-export function sandboxHost(name: string, sandboxDomain: string): string {
+function sandboxHost(name: string, sandboxDomain: string): string {
   return `${name}.${sandboxDomain}`;
 }
 

@@ -4,6 +4,7 @@ import * as v from "valibot";
 
 import { loadConfig } from "@/config";
 import { ErrorCode, GatewayError, errorResponse } from "@/errors";
+import { d1UserStore } from "@/users";
 
 import { Activity } from "./activity.ts";
 import { WorkspaceBackups } from "./backups.ts";
@@ -20,17 +21,25 @@ export class OpencodeSandbox extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    if (!ctx.container) {
+    const userId = ctx.id.name;
+    if (!ctx.container || !userId) {
       throw new GatewayError(ErrorCode.SandboxNotConfigured);
     }
     const backups = new WorkspaceBackups(
       new DirectoryBackup(ctx.container, ctx.exports.DirectoryBackupGateway, {
         binding: BACKUP_BINDING,
-        prefix: BACKUP_PREFIX,
+        prefix: `${BACKUP_PREFIX}${userId}/`,
       }),
       ctx.storage,
     );
-    this.server = new OpencodeServer(ctx, loadConfig(env), backups, this.activity);
+    const users = d1UserStore(env.DB);
+    this.server = new OpencodeServer(ctx, loadConfig(env), backups, this.activity, async () => {
+      const user = await users.byId(userId);
+      if (!user) {
+        throw new GatewayError(ErrorCode.NotFound, { details: { reason: "user deleted" } });
+      }
+      return user.installationId;
+    });
   }
 
   override async fetch(request: Request): Promise<Response> {
@@ -59,6 +68,10 @@ export class OpencodeSandbox extends DurableObject<Env> {
 
   stop(): Promise<void> {
     return this.server.stop();
+  }
+
+  destroy(): Promise<void> {
+    return this.server.destroy();
   }
 
   private async proxy(port: Fetcher, request: Request): Promise<Response> {
