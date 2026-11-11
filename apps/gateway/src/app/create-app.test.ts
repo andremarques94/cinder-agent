@@ -2,7 +2,7 @@ import type { ExecutionContext } from "hono";
 import * as v from "valibot";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
-import type { Config } from "@/config";
+import type { Config } from "@/lib/config";
 import type { SandboxDirectory, SandboxHandle } from "@/sandbox";
 import { migratedDatabase } from "@/testing";
 import { userStore, type User } from "@/users";

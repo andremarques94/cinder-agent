@@ -31,7 +31,7 @@
     },
   ],
   "d1_databases": [
-    { "binding": "DB", "database_name": "cinder-agent", "migrations_dir": "migrations" },
+    { "binding": "DB", "database_name": "cinder-agent", "migrations_dir": "src/users/migrations" },
   ],
   "access": {
     "dev": { "aud": "local-dev", "identity": { "email": "me@example.com" } },

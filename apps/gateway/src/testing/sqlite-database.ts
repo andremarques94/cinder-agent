@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/sqlite-proxy";
 
 import type { Database } from "@/users";
 
-import users from "../../migrations/0000_users.sql?raw";
+import users from "../users/migrations/0000_users.sql?raw";
 
 const MIGRATIONS = [users];
 
