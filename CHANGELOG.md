@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/andremarques94/cinder-agent/compare/v0.1.1...v0.2.0) (2026-11-11)
+
+
+### Features
+
+* push and open pull requests from the sandbox as a GitHub App ([#10](https://github.com/andremarques94/cinder-agent/issues/10)) ([958b3e6](https://github.com/andremarques94/cinder-agent/commit/958b3e68d21c0f98770abc51d83b43db37ec4a6a))
+
+
+### Bug Fixes
+
+* **gateway:** re-register GitHub intercepts when the worker restarts ([#12](https://github.com/andremarques94/cinder-agent/issues/12)) ([3852b26](https://github.com/andremarques94/cinder-agent/commit/3852b2613c76825fc9934d529727371738375302))
+
 ## [0.1.1](https://github.com/andremarques94/cinder-agent/compare/v0.1.0...v0.1.1) (2026-11-11)
 
 
