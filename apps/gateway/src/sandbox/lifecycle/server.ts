@@ -144,7 +144,7 @@ export class OpencodeServer {
         image: container.images.opencode,
         instance: this.config.instance,
         env: containerEnv(await this.loadPassword(), github),
-        // TODO(security): outbound allowlist instead (PLAN.md §3.1).
+        // TODO(security): outbound allowlist instead of open internet access.
         enableInternet: true,
       });
       await container.setInactivityTimeout(this.safetyTimeoutMs());

@@ -53,7 +53,16 @@ Object (named by the user's ID, not the sandbox name), which starts the containe
 GitHub token; its traffic to GitHub goes through `GithubOutbound`, which adds a short-lived token
 from the user's GitHub App installation for the repository's owner.
 
-**Work in progress.** See [PLAN.md](PLAN.md) for what's next.
+## Status
+
+Works today: a sandbox per invited user with backups, the OpenCode web UI and apps (including
+the iOS app, paired from the dashboard), and pushes and pull requests as your GitHub App.
+
+Before you invite people you don't fully trust, know that sandboxes still have open internet
+access and no push rules (no force-push, only installed repos); the outbound allowlist comes next.
+
+Next, in order: ship and harden, models, GitHub-triggered work, notifications on your phone,
+usage and budgets per user, admin in the dashboard, and scheduled jobs.
 
 ## Requirements
 

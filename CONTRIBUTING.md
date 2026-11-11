@@ -73,7 +73,9 @@ The `commit-msg` hook rejects messages that don't follow this.
 - Parse outside data with valibot schemas and built-ins (`URL`, `URLSearchParams`,
   `v.digits()`, `v.slug()`, `v.url()`) instead of regexes or ad hoc string splitting. A regex
   that stays is small, named and inside a schema.
-- Comments only for TODOs and links to the docs the code was taken from.
+- Comments only for TODOs, links to the docs the code was taken from, and a short "why" for an
+  ordering or recovery rule that isn't obvious from the code: what must happen first, or what a
+  failure must leave intact. Never narrate what the code does.
 
 The dashboard's look (colours, type, layout, components and the rules behind them) is in
 [DESIGN.md](DESIGN.md). Build new screens from it; change it in the same pull request when a

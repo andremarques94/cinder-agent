@@ -2,7 +2,7 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   fmt: {
-    ignorePatterns: ["**/worker-configuration.d.ts", "PLAN.md", "CHANGELOG.md"],
+    ignorePatterns: ["**/worker-configuration.d.ts", "docs/**", "CHANGELOG.md"],
     sortImports: true,
   },
   lint: {
