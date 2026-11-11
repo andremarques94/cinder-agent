@@ -8,7 +8,8 @@ behind a small Worker. It's reachable at `https://<name>.<your-domain>`, and you
 OpenCode's pairing links, which you get from `https://app.<your-domain>` after signing in with
 GitHub through Cloudflare Access.
 
-A sandbox stops after 30 minutes idle by default. Before it stops, its files, sessions and model
+A sandbox stops after 30 minutes idle by default (`INACTIVITY_TIMEOUT_MINUTES`, at most 355,
+because Cloudflare stops a container after 6 hours idle). Before it stops, its files, sessions and model
 logins are backed up to R2 and restored on the next start. Changes made since the last stop are
 lost if the container dies unexpectedly.
 
