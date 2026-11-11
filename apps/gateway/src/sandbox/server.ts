@@ -46,7 +46,10 @@ export class OpencodeServer {
   ) {
     const container = ctx.container;
     if (container?.running) {
-      void ctx.blockConcurrencyWhile(() => container.setInactivityTimeout(this.safetyTimeoutMs()));
+      void ctx.blockConcurrencyWhile(async () => {
+        await container.setInactivityTimeout(this.safetyTimeoutMs());
+        await this.interceptGithub(container);
+      });
       this.watch(container);
     }
   }
@@ -160,12 +163,7 @@ export class OpencodeServer {
     if (!github) {
       return null;
     }
-    const outbound = this.ctx.exports.GithubOutbound({
-      props: { installationId: github.installationId },
-    });
-    for (const host of GITHUB_HOSTS) {
-      await container.interceptOutboundHttps(host, outbound);
-    }
+    await this.interceptGithub(container);
     const identity = await githubApp(github)
       .botIdentity(github.installationId)
       .catch((error: unknown) => {
@@ -173,6 +171,20 @@ export class OpencodeServer {
         return null;
       });
     return { identity };
+  }
+
+  // https://developers.cloudflare.com/containers/api/durable-object-container/
+  private async interceptGithub(container: Container): Promise<void> {
+    const github = this.config.github;
+    if (!github) {
+      return;
+    }
+    const outbound = this.ctx.exports.GithubOutbound({
+      props: { installationId: github.installationId },
+    });
+    for (const host of GITHUB_HOSTS) {
+      await container.interceptOutboundHttps(host, outbound);
+    }
   }
 
   private saveAndStop(reason: string): Promise<void> {
