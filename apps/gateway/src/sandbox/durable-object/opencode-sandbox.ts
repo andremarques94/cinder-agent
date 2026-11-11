@@ -8,6 +8,7 @@ import { d1UserStore } from "@/users";
 
 import { WorkspaceBackups } from "../backups/backups.ts";
 import { PairingCodeSchema, type PairingCode } from "../container/opencode-responses.ts";
+import { identityInstallation } from "../github/installation-tokens.ts";
 import { sandboxGithub } from "../github/sandbox-github.ts";
 import { Activity } from "../lifecycle/activity.ts";
 import { OpencodeServer, type ServerPort, type ServerStatus } from "../lifecycle/server.ts";
@@ -49,13 +50,7 @@ export class OpencodeSandbox extends DurableObject<Env> {
         config: config.github,
         container,
         outbound: () => ctx.exports.GithubOutbound({ props: { userId } }),
-        identityInstallation: async () => {
-          const user = await users.byId(userId);
-          if (!user || user.deletingAt !== null) {
-            throw new GatewayError(ErrorCode.NotFound, { details: { reason: "user deleted" } });
-          }
-          return (await users.installations(userId))[0]?.installationId ?? null;
-        },
+        identityInstallation: () => identityInstallation(users, userId),
       }),
     });
     void ctx.blockConcurrencyWhile(() => this.server.resume());
@@ -75,20 +70,24 @@ export class OpencodeSandbox extends DurableObject<Env> {
     await this.server.checkIdle();
   }
 
+  // fallow-ignore-next-line unused-class-member -- called over Durable Object RPC in directory.ts
   async pair(): Promise<PairingCode> {
     this.activity.touch();
     const { client } = await this.server.ensureReady();
     return v.parse(PairingCodeSchema, await client.server.pair());
   }
 
+  // fallow-ignore-next-line unused-class-member -- called over Durable Object RPC in directory.ts
   status(): Promise<ServerStatus> {
     return this.server.status();
   }
 
+  // fallow-ignore-next-line unused-class-member -- called over Durable Object RPC in directory.ts
   stop(): Promise<void> {
     return this.server.stop();
   }
 
+  // fallow-ignore-next-line unused-class-member -- called over Durable Object RPC in directory.ts
   destroy(): Promise<void> {
     return this.server.destroy();
   }
