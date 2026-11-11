@@ -10,7 +10,14 @@
     "deploy": "vp run gateway#deploy"
   },
   "devDependencies": {
+    "@commitlint/cli": "catalog:",
+    "@commitlint/config-conventional": "catalog:",
     "vite-plus": "catalog:"
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
   },
   "devEngines": {
     "packageManager": {
