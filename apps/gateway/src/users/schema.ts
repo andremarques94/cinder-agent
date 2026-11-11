@@ -15,6 +15,7 @@ export const users = sqliteTable("users", {
     .references(() => sandboxNames.name),
   createdAt: integer("created_at").notNull(),
   lastLoginAt: integer("last_login_at"),
+  deletingAt: integer("deleting_at"),
 });
 
 export const githubAccounts = sqliteTable("github_accounts", {

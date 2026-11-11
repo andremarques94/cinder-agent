@@ -18,6 +18,7 @@ const STARTUP_DEADLINE_MS = 60_000;
 const READY_POLL_INTERVAL_MS = 500;
 const INFO_TIMEOUT_MS = 2_000;
 const IDLE_CHECK_INTERVAL_MS = 60_000;
+const DELETED_KEY = "deleted-at";
 
 export type ServerConfig = Pick<Config, "instance" | "inactivityTimeoutMs">;
 
@@ -81,6 +82,7 @@ export class OpencodeServer {
   private ready = false;
   private password: string | null = null;
   private destroying = false;
+  private deleted = false;
 
   constructor(deps: ServerDeps) {
     this.container = deps.container;
@@ -145,7 +147,12 @@ export class OpencodeServer {
     await this.scheduleIdleCheck();
   }
 
+  // The deleted mark is written before teardown and again after deleteAll, so no start queued
+  // behind this one, and none after the Durable Object restarts, can bring the container back.
   private async destroyNow(): Promise<undefined> {
+    const deletedAt = `${Date.now()}`;
+    this.deleted = true;
+    await this.storage.put(DELETED_KEY, deletedAt);
     this.ready = false;
     if (this.container.running) {
       this.destroying = true;
@@ -154,13 +161,22 @@ export class OpencodeServer {
     await this.backups.deleteLatest();
     await this.storage.deleteAlarm();
     await this.storage.deleteAll();
+    await this.storage.put(DELETED_KEY, deletedAt);
     this.password = null;
     log.info("sandbox_destroyed", {});
     return undefined;
   }
 
+  private async isDeleted(): Promise<boolean> {
+    this.deleted ||= (await this.storage.get(DELETED_KEY)) !== undefined;
+    return this.deleted;
+  }
+
   // https://developers.cloudflare.com/containers/guides/migrate-to-durable-object-container-api/
   private async startOnce(): Promise<RunningServer> {
+    if (await this.isDeleted()) {
+      throw new GatewayError(ErrorCode.NotFound, { details: { reason: "sandbox deleted" } });
+    }
     if (this.container.running && this.ready) {
       return this.connect();
     }

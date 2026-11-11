@@ -47,7 +47,8 @@ export class OpencodeSandbox extends DurableObject<Env> {
         container,
         outbound: () => ctx.exports.GithubOutbound({ props: { userId } }),
         identityInstallation: async () => {
-          if (!(await users.byId(userId))) {
+          const user = await users.byId(userId);
+          if (!user || user.deletingAt !== null) {
             throw new GatewayError(ErrorCode.NotFound, { details: { reason: "user deleted" } });
           }
           return (await users.installations(userId))[0]?.installationId ?? null;

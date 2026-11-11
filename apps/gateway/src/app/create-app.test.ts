@@ -159,6 +159,16 @@ describe("given a request to a sandbox hostname", () => {
     expect(calls).toEqual([]);
   });
 
+  test("when the user is being deleted, then their hostname is gone", async () => {
+    const { app, calls, users, ada } = await gateway();
+    await users.markDeleting(ada.id);
+
+    const response = await app.request("https://ada.example.com/");
+
+    expect(response.status).toBe(404);
+    expect(calls).toEqual([]);
+  });
+
   test("when the user was deleted, then their hostname is gone", async () => {
     const { app, calls, users, ada } = await gateway();
     await users.delete(ada.id);
@@ -501,7 +511,18 @@ describe("given an admin with a valid token", () => {
     const response = await broken.request(`${ADMIN}/admin/users/${ada.id}`, json("DELETE", {}));
 
     expect(response.status).toBe(503);
-    expect(await users.byId(ada.id)).not.toBeNull();
+    expect(await users.byId(ada.id)).toMatchObject({ deletingAt: expect.any(Number) });
+  });
+
+  test("when a failed delete is retried, then it finishes and removes the user", async () => {
+    const { app, calls, users, ada } = await gateway();
+    await users.markDeleting(ada.id);
+
+    const response = await app.request(`${ADMIN}/admin/users/${ada.id}`, json("DELETE", {}));
+
+    expect(response.status).toBe(204);
+    expect(calls).toEqual(["ada destroy"]);
+    expect(await users.byId(ada.id)).toBeNull();
   });
 
   test("when they link installations, then each belongs to one user and shows in the list", async () => {

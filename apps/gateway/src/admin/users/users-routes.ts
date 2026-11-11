@@ -38,6 +38,9 @@ export const usersRoutes = new Hono<AdminEnv>()
 
   .delete("/:id", async (c) => {
     const user = await requireUser(c);
+    // Marking the user first stops routing and GitHub tokens; the row goes last so a failed
+    // cleanup can be retried with the same request.
+    await c.var.users.markDeleting(user.id);
     await callSandbox(user.sandbox, () => c.var.sandboxes.get(user.id).destroy());
     await c.var.users.delete(user.id);
     return c.body(null, HttpStatus.NoContent);
