@@ -21,6 +21,42 @@ const SandboxList = v.pipe(
   v.transform((names: string[]) => new Set(names)),
 );
 
+const Id = v.pipe(v.string(), v.regex(/^[1-9][0-9]*$/), v.transform(Number));
+
+const PrivateKey = v.pipe(
+  v.string(),
+  v.transform((key: string) => key.replaceAll("\\n", "\n").trim()),
+  v.startsWith("-----BEGIN PRIVATE KEY-----"),
+);
+
+const Unset = v.optional(v.literal(""), "");
+
+const GithubSchema = v.union(
+  [
+    v.pipe(
+      v.object({
+        GITHUB_APP_ID: Id,
+        GITHUB_INSTALLATION_ID: Id,
+        GITHUB_APP_PRIVATE_KEY: PrivateKey,
+      }),
+      v.transform((env) => ({
+        appId: env.GITHUB_APP_ID,
+        installationId: env.GITHUB_INSTALLATION_ID,
+        privateKey: env.GITHUB_APP_PRIVATE_KEY,
+      })),
+    ),
+    v.pipe(
+      v.object({
+        GITHUB_APP_ID: Unset,
+        GITHUB_INSTALLATION_ID: Unset,
+        GITHUB_APP_PRIVATE_KEY: Unset,
+      }),
+      v.transform(() => null),
+    ),
+  ],
+  "set all of GITHUB_APP_ID, GITHUB_INSTALLATION_ID and a PKCS#8 GITHUB_APP_PRIVATE_KEY, or none",
+);
+
 const ConfigSchema = v.pipe(
   v.object({
     SANDBOX_DOMAIN: v.pipe(v.string(), v.minLength(1), v.toLowerCase()),
@@ -44,9 +80,9 @@ const ConfigSchema = v.pipe(
   })),
 );
 
-export type Config = v.InferOutput<typeof ConfigSchema>;
-export type InstanceType = Config["instance"];
+export type Config = ReturnType<typeof loadConfig>;
+export type GithubConfig = NonNullable<Config["github"]>;
 
-export function loadConfig(env: unknown): Config {
-  return v.parse(ConfigSchema, env);
+export function loadConfig(env: unknown) {
+  return { ...v.parse(ConfigSchema, env), github: v.parse(GithubSchema, env) };
 }

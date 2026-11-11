@@ -15,6 +15,7 @@ const config: Config = {
   instance: "standard-1",
   inactivityTimeoutMs: 60_000,
   adminToken: TOKEN,
+  github: null,
 };
 
 function fakeSandboxes({ failPairing = false, pairingCode = "one-time-code" } = {}) {

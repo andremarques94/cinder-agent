@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "prepare": "vp config",
-    "ready": "vp check && vp run -r test",
+    "ready": "vp check && vp exec knip && vp run -r test",
     "dev": "vp run gateway#dev",
     "deploy": "vp run gateway#deploy"
   },
   "devDependencies": {
     "@commitlint/cli": "catalog:",
     "@commitlint/config-conventional": "catalog:",
+    "knip": "catalog:",
     "vite-plus": "catalog:"
   },
   "commitlint": {

@@ -17,6 +17,7 @@ test("loadConfig parses the whole environment", () => {
     instance: "standard-2",
     inactivityTimeoutMs: 600_000,
     adminToken: "secret",
+    github: null,
   });
 });
 
@@ -43,4 +44,28 @@ test("a missing domain or an invalid sandbox name is an error, not a silent defa
       "sandbox names must look like",
     );
   }
+});
+
+const pem = (label: string) => `-----BEGIN ${label}-----\nabc\n-----END ${label}-----`;
+const KEY = pem("PRIVATE KEY");
+
+test("GitHub App settings are read together, with escaped newlines in the key", () => {
+  const env = { SANDBOX_DOMAIN: "example.com" };
+  expect(loadConfig(env).github).toBeNull();
+  expect(
+    loadConfig({
+      ...env,
+      GITHUB_APP_ID: "12",
+      GITHUB_INSTALLATION_ID: "34",
+      GITHUB_APP_PRIVATE_KEY: KEY.replaceAll("\n", "\\n"),
+    }).github,
+  ).toEqual({ appId: 12, installationId: 34, privateKey: KEY });
+});
+
+test("partial GitHub App settings or a PKCS#1 key are an error", () => {
+  const env = { SANDBOX_DOMAIN: "example.com", GITHUB_APP_ID: "12", GITHUB_INSTALLATION_ID: "34" };
+  expect(() => loadConfig(env)).toThrow("set all of GITHUB_APP_ID");
+  expect(() => loadConfig({ ...env, GITHUB_APP_PRIVATE_KEY: pem("RSA PRIVATE KEY") })).toThrow(
+    "PKCS#8",
+  );
 });

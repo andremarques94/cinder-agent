@@ -6,7 +6,8 @@ src/
   app/        Hono app: sandbox hostnames → sandbox, everything else → /admin
   admin/      Admin API: pair, status, stop
   routing/    Hostname → sandbox
-  sandbox/    Durable Object and container lifecycle, one per sandbox
+  sandbox/    Durable Object, container lifecycle and outbound handlers, one per sandbox
+  github/     GitHub App tokens and which outbound requests get them
   config/     wrangler.jsonc vars, validated with valibot
   errors/     Error codes, statuses and messages; errorResponse()
   log/        Logging

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@cloudflare/sandbox": "catalog:",
+    "@octokit/auth-app": "catalog:",
     "@opencode/client": "catalog:",
     "hono": "catalog:",
     "valibot": "catalog:"

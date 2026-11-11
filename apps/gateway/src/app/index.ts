@@ -1,1 +1,1 @@
-export { createApp, type GatewayDeps } from "./create-app.ts";
+export { createApp } from "./create-app.ts";
