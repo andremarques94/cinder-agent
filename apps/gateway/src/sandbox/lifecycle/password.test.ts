@@ -1,6 +1,8 @@
-import { expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vite-plus/test";
 
 import { loadOrCreatePassword, type PasswordStore } from "./password.ts";
+
+const KEY = "opencode-password";
 
 function memoryStore(initial: Record<string, unknown> = {}) {
   const values = new Map(Object.entries(initial));
@@ -13,23 +15,38 @@ function memoryStore(initial: Record<string, unknown> = {}) {
   return { store, values };
 }
 
-test("creates a password once, then keeps returning the same one", async () => {
-  const { store } = memoryStore();
-  const first = await loadOrCreatePassword(store);
-  expect(first).not.toBe("");
-  expect(await loadOrCreatePassword(store)).toBe(first);
+describe("given an empty store", () => {
+  test("when the password is loaded twice, then it is created once and kept", async () => {
+    const { store } = memoryStore();
+
+    const first = await loadOrCreatePassword(store);
+    const second = await loadOrCreatePassword(store);
+
+    expect(first).not.toBe("");
+    expect(second).toBe(first);
+  });
 });
 
-test("keeps an existing password in an older format, so devices stay signed in", async () => {
-  const { store } = memoryStore({ "opencode-password": "older-base64url-password" });
-  expect(await loadOrCreatePassword(store)).toBe("older-base64url-password");
-});
+describe("given a password saved in an older format", () => {
+  test("when it is loaded, then it is kept so devices stay signed in", async () => {
+    const { store } = memoryStore({ [KEY]: "older-base64url-password" });
 
-test("replaces an empty or non-string value, because an empty password disables auth", async () => {
-  for (const broken of ["", 42, null]) {
-    const { store, values } = memoryStore({ "opencode-password": broken });
     const password = await loadOrCreatePassword(store);
-    expect(password).not.toBe("");
-    expect(values.get("opencode-password")).toBe(password);
-  }
+
+    expect(password).toBe("older-base64url-password");
+  });
+});
+
+describe("given an empty or non-string password", () => {
+  test.each(["", 42, null])(
+    "when %j is loaded, then it is replaced, because an empty password disables auth",
+    async (broken) => {
+      const { store, values } = memoryStore({ [KEY]: broken });
+
+      const password = await loadOrCreatePassword(store);
+
+      expect(password).not.toBe("");
+      expect(values.get(KEY)).toBe(password);
+    },
+  );
 });

@@ -3,8 +3,7 @@ import * as v from "valibot";
 
 import type { GithubConfig } from "@/lib/config";
 import { ErrorCode, GatewayError } from "@/lib/errors";
-
-const API_URL = "https://api.github.com";
+import { GITHUB_API_URL, githubApiHeaders } from "@/lib/github";
 
 const AppSchema = v.object({ slug: v.pipe(v.string(), v.nonEmpty()) });
 const UserSchema = v.object({ id: v.pipe(v.number(), v.integer()) });
@@ -52,30 +51,28 @@ function createGithubApp({ appId, privateKey }: GithubConfig): GithubApp {
     return { name: login, email: `${id}+${login}@users.noreply.github.com` };
   };
 
+  const loadIdentityOnce = async (installationId: number): Promise<GitIdentity> => {
+    try {
+      return await loadIdentity(installationId);
+    } catch (cause) {
+      identity = null;
+      throw cause instanceof GatewayError
+        ? cause
+        : new GatewayError(ErrorCode.GithubUnavailable, { cause });
+    }
+  };
+
   return {
     installationToken,
     botIdentity(installationId) {
-      identity ??= loadIdentity(installationId).catch((cause: unknown) => {
-        identity = null;
-        throw cause instanceof GatewayError
-          ? cause
-          : new GatewayError(ErrorCode.GithubUnavailable, { cause });
-      });
+      identity ??= loadIdentityOnce(installationId);
       return identity;
     },
   };
 }
 
-// https://docs.github.com/en/rest/using-the-rest-api/getting-started-with-the-rest-api
 async function getJson(path: string, token: string): Promise<unknown> {
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: {
-      accept: "application/vnd.github+json",
-      authorization: `Bearer ${token}`,
-      "user-agent": "cinder-agent",
-      "x-github-api-version": "2022-11-28",
-    },
-  });
+  const response = await fetch(`${GITHUB_API_URL}${path}`, { headers: githubApiHeaders(token) });
   if (!response.ok) {
     throw new Error(`GET ${path} returned ${response.status}`);
   }

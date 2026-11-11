@@ -189,25 +189,34 @@ export function userStore(db: Database, now: () => number = Date.now): UserStore
   };
 }
 
-const UNIQUE = /UNIQUE constraint failed|PRIMARY KEY constraint failed/;
-const FOREIGN_KEY = /FOREIGN KEY constraint failed/;
+const UNIQUE_FAILURES = ["UNIQUE constraint failed", "PRIMARY KEY constraint failed"];
+const FOREIGN_KEY_FAILURE = "FOREIGN KEY constraint failed";
 
-function failOn<T>(
-  query: Promise<T>,
-  codes: { unique?: ErrorCode; foreignKey?: ErrorCode },
-): Promise<T> {
-  return query.catch((cause: unknown) => {
-    const text = messages(cause).join("\n");
-    const code = UNIQUE.test(text)
-      ? codes.unique
-      : FOREIGN_KEY.test(text)
-        ? codes.foreignKey
-        : null;
+interface ConstraintCodes {
+  unique?: ErrorCode;
+  foreignKey?: ErrorCode;
+}
+
+async function failOn<T>(query: Promise<T>, codes: ConstraintCodes): Promise<T> {
+  try {
+    return await query;
+  } catch (cause) {
+    const code = constraintCode(messages(cause).join("\n"), codes);
     if (code) {
       throw new GatewayError(code, { cause });
     }
     throw cause;
-  });
+  }
+}
+
+function constraintCode(text: string, codes: ConstraintCodes): ErrorCode | undefined {
+  if (UNIQUE_FAILURES.some((failure) => text.includes(failure))) {
+    return codes.unique;
+  }
+  if (text.includes(FOREIGN_KEY_FAILURE)) {
+    return codes.foreignKey;
+  }
+  return undefined;
 }
 
 function messages(error: unknown): string[] {

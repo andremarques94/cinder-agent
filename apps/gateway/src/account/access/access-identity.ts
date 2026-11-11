@@ -13,6 +13,7 @@ const IdentitySchema = v.object({ email: Email });
 const AssertionSchema = v.object({ email: Email, exp: v.number() });
 
 const JWKS_CACHE_SECONDS = 300;
+const ACCESS_CERTS_PATH = "/cdn-cgi/access/certs";
 
 export interface AccessSettings {
   audience: string | undefined;
@@ -61,20 +62,33 @@ async function assertionEmail(
   teamDomain: string,
   keys: HonoJsonWebKey[] | undefined,
 ): Promise<string> {
-  const payload = await verifyWithJwks(
-    assertion,
-    {
-      ...(keys ? { keys } : { jwks_uri: `${teamDomain}/cdn-cgi/access/certs` }),
-      allowedAlgorithms: ["RS256"],
-      verification: { iss: teamDomain, aud: audience },
-    },
-    { cf: { cacheEverything: true, cacheTtl: JWKS_CACHE_SECONDS } },
-  ).catch((cause: unknown) => {
-    throw new GatewayError(ErrorCode.NotSignedIn, { cause, details: { reason: "invalid JWT" } });
-  });
-  const parsed = v.safeParse(AssertionSchema, payload);
+  const parsed = v.safeParse(
+    AssertionSchema,
+    await verifiedPayload(assertion, audience, teamDomain, keys),
+  );
   if (!parsed.success) {
     throw new GatewayError(ErrorCode.NotSignedIn, { details: { reason: "JWT without email" } });
   }
   return parsed.output.email;
+}
+
+async function verifiedPayload(
+  assertion: string,
+  audience: string,
+  teamDomain: string,
+  keys: HonoJsonWebKey[] | undefined,
+): Promise<unknown> {
+  try {
+    return await verifyWithJwks(
+      assertion,
+      {
+        ...(keys ? { keys } : { jwks_uri: `${teamDomain}${ACCESS_CERTS_PATH}` }),
+        allowedAlgorithms: ["RS256"],
+        verification: { iss: teamDomain, aud: audience },
+      },
+      { cf: { cacheEverything: true, cacheTtl: JWKS_CACHE_SECONDS } },
+    );
+  } catch (cause) {
+    throw new GatewayError(ErrorCode.NotSignedIn, { cause, details: { reason: "invalid JWT" } });
+  }
 }

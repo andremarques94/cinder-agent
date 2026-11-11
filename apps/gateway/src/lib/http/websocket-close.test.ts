@@ -1,10 +1,23 @@
-import { expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vite-plus/test";
 
 import { WebSocketClose, forwardableCloseCode } from "./websocket-close.ts";
 
-test("reserved close codes are replaced with Normal, others pass through", () => {
-  expect(forwardableCloseCode(WebSocketClose.NoStatusReceived)).toBe(WebSocketClose.Normal);
-  expect(forwardableCloseCode(WebSocketClose.AbnormalClosure)).toBe(WebSocketClose.Normal);
-  expect(forwardableCloseCode(WebSocketClose.InternalError)).toBe(WebSocketClose.InternalError);
-  expect(forwardableCloseCode(4000)).toBe(4000);
+describe("given a close code from the container", () => {
+  test.each([WebSocketClose.NoStatusReceived, WebSocketClose.AbnormalClosure])(
+    "when the reserved code %i is forwarded, then it becomes Normal",
+    (code) => {
+      const forwarded = forwardableCloseCode(code);
+
+      expect(forwarded).toBe(WebSocketClose.Normal);
+    },
+  );
+
+  test.each([WebSocketClose.InternalError, 4000])(
+    "when the code %i is forwarded, then it passes through",
+    (code) => {
+      const forwarded = forwardableCloseCode(code);
+
+      expect(forwarded).toBe(code);
+    },
+  );
 });

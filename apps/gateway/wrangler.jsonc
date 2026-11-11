@@ -6,6 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "upload_source_maps": true,
   "observability": { "enabled": true },
+  "rules": [{ "type": "Data", "globs": ["**/*.woff2"], "fallthrough": true }],
 
   "vars": {
     "SANDBOX_DOMAIN": "example.com",

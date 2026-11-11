@@ -8,6 +8,7 @@ export interface AccountVariables {
   users: UserStore;
   access: unknown;
   fetch: typeof fetch;
+  font: ArrayBuffer | null;
   user: User;
 }
 

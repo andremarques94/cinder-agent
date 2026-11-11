@@ -8,12 +8,19 @@ export async function requestBody<TSchema extends v.GenericSchema>(
   c: AdminContext,
   schema: TSchema,
 ): Promise<v.InferOutput<TSchema>> {
-  const json: unknown = await c.req.json().catch(() => undefined);
-  const parsed = v.safeParse(schema, json);
+  const parsed = v.safeParse(schema, await jsonBody(c));
   if (!parsed.success) {
     throw new GatewayError(ErrorCode.InvalidRequest, {
       details: { issues: v.summarize(parsed.issues) },
     });
   }
   return parsed.output;
+}
+
+async function jsonBody(c: AdminContext): Promise<unknown> {
+  try {
+    return await c.req.json();
+  } catch {
+    return undefined;
+  }
 }

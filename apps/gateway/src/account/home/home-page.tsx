@@ -1,16 +1,28 @@
 import { Hono } from "hono";
 
+import { APP_NAME } from "@/lib/config";
 import { describeError, log } from "@/lib/log";
-import { sandboxOrigin, type ServerStatus } from "@/sandbox";
+import { sandboxOrigin, type SandboxHandle, type ServerStatus } from "@/sandbox";
 import type { GithubAccount, Installation, User } from "@/users";
 
 import type { AccountEnv } from "../account-env.ts";
-import { Layout } from "../layout.tsx";
+import { Layout, githubAvatar } from "../layout.tsx";
+import { timeAgo } from "./time-ago.ts";
+
+type SandboxState = "running" | "starting" | "asleep" | "unavailable";
+
+const STATE: Record<SandboxState, { label: string; detail: string | null }> = {
+  running: { label: "Running", detail: null },
+  starting: { label: "Starting", detail: null },
+  asleep: { label: "Asleep", detail: "wakes on connect" },
+  unavailable: { label: "Unknown", detail: "can't reach it" },
+};
 
 interface HomeProps {
   user: User;
   server: string;
   status: ServerStatus | null;
+  now: number;
   githubApp: boolean;
   githubSignIn: boolean;
   githubAccount: GithubAccount | null;
@@ -20,13 +32,7 @@ interface HomeProps {
 export const homePage = new Hono<AccountEnv>().get("/", async (c) => {
   const { user, users, sandboxes, config } = c.var;
   const [status, githubAccount, installations] = await Promise.all([
-    sandboxes
-      .get(user.id)
-      .status()
-      .catch((error: unknown) => {
-        log.warn("sandbox_status_failed", describeError(error));
-        return null;
-      }),
+    statusOrNull(sandboxes.get(user.id)),
     users.githubAccount(user.id),
     users.installations(user.id),
   ]);
@@ -35,6 +41,7 @@ export const homePage = new Hono<AccountEnv>().get("/", async (c) => {
       user={user}
       server={sandboxOrigin(user.sandbox, config.sandboxDomain, new URL(c.req.url))}
       status={status}
+      now={Date.now()}
       githubApp={config.github !== null}
       githubSignIn={config.githubSignIn !== null}
       githubAccount={githubAccount}
@@ -44,113 +51,171 @@ export const homePage = new Hono<AccountEnv>().get("/", async (c) => {
 });
 
 function Home(props: HomeProps) {
+  const { user, server, githubAccount, githubApp } = props;
   return (
-    <Layout title="cinder-agent">
-      <h1>cinder-agent</h1>
-      <p class="muted">Signed in as {props.user.email}</p>
-      <Devices server={props.server} />
-      <Github {...props} />
-      <Settings {...props} />
+    <Layout
+      title={APP_NAME}
+      viewer={{
+        email: user.email,
+        avatar: githubAccount ? githubAvatar(githubAccount.login) : null,
+      }}
+      page="overview"
+      showGithub={githubApp}
+      actions={<PairButton primary />}
+    >
+      <h2 class="title">{user.sandbox}</h2>
+      <p class="lede">
+        <a href={server}>{new URL(server).host}</a>
+      </p>
+      <Stats {...props} />
+      <Devices server={server} />
+      {githubApp ? <Github {...props} /> : null}
     </Layout>
+  );
+}
+
+function PairButton({ primary = false }: { primary?: boolean }) {
+  return (
+    <form method="post" action="/devices/pair">
+      <button class={primary ? "button primary" : "button"}>Pair a device</button>
+    </form>
+  );
+}
+
+function Stats({ status, now }: HomeProps) {
+  const state = sandboxState(status);
+  const { label, detail } = STATE[state];
+  return (
+    <dl class="stats">
+      <div class="stat">
+        <dt>Status</dt>
+        <dd class={state === "running" ? "ok" : undefined}>
+          {label}
+          {detail ? <small>{detail}</small> : null}
+        </dd>
+      </div>
+      <div class="stat">
+        <dt>Last saved</dt>
+        <dd>{status?.lastSavedAt ? timeAgo(status.lastSavedAt, now) : "Never"}</dd>
+      </div>
+      <div class="stat">
+        <dt>OpenCode</dt>
+        <dd>{status?.version ?? "—"}</dd>
+      </div>
+    </dl>
   );
 }
 
 function Devices({ server }: { server: string }) {
   return (
-    <section>
-      <h2>Devices</h2>
-      <p>
-        Pair the OpenCode app on your phone or computer with your server, or open{" "}
-        <a href={server}>{server}</a> in a browser.
-      </p>
-      <form method="post" action="/devices/pair">
-        <button>Pair a device</button>
-      </form>
-    </section>
-  );
-}
-
-function Github({ githubApp, githubSignIn, githubAccount, installations }: HomeProps) {
-  return (
-    <section>
-      <h2>GitHub</h2>
-      {githubAccount ? (
-        <p>
-          Linked to GitHub as <strong>{githubAccount.login}</strong>.
-        </p>
-      ) : (
-        <p class="muted">Not linked to a GitHub account.</p>
-      )}
-      {installations.length > 0 ? (
-        <>
-          <p>Your sandbox can push to repositories on:</p>
-          <ul>
-            {installations.map((installation) => (
-              <li>
-                {installation.accountLogin ?? `Installation ${installation.installationId}`}
-                <form
-                  method="post"
-                  action={`/github/installations/${installation.installationId}/delete`}
-                >
-                  <button>Unlink</button>
-                </form>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <p class="muted">No GitHub App installations are linked yet.</p>
-      )}
-      {githubSignIn ? (
-        <div class="actions">
-          <a class="button" href="/github/install">
-            Install the GitHub App
-          </a>
-          <a class="button" href="/github/connect">
-            Link installations you already have
+    <section id="devices" class="group">
+      <div class="group-head">
+        <h2>Devices</h2>
+      </div>
+      <div class="rows">
+        <div class="row">
+          <div class="grow">
+            <strong>OpenCode app</strong>
+            <span class="sub">Pair your phone or computer. Each code works once.</span>
+          </div>
+          <PairButton />
+        </div>
+        <div class="row">
+          <div class="grow">
+            <strong>Browser</strong>
+            <span class="sub">Use OpenCode on the web, on this device.</span>
+          </div>
+          <a class="button" href={server}>
+            Open
           </a>
         </div>
-      ) : (
-        <p class="muted">
-          {githubApp
-            ? "Self-service install isn't set up on this gateway; ask the admin to link an installation."
-            : "GitHub isn't set up on this gateway."}
-        </p>
-      )}
+      </div>
     </section>
   );
 }
 
-function Settings({ user, server, status }: HomeProps) {
+function Github({ githubSignIn, githubAccount, installations }: HomeProps) {
   return (
-    <section>
-      <h2>Settings</h2>
-      <dl>
-        <dt>Email</dt>
-        <dd>{user.email}</dd>
-        <dt>Sandbox</dt>
-        <dd>{user.sandbox}</dd>
-        <dt>Server</dt>
-        <dd>
-          <a href={server}>{server}</a>
-        </dd>
-        <dt>Status</dt>
-        <dd>{describeStatus(status)}</dd>
-        <dt>OpenCode</dt>
-        <dd>{status?.version ?? "—"}</dd>
-        <dt>Last saved</dt>
-        <dd>{status?.lastSavedAt ?? "never"}</dd>
-      </dl>
+    <section id="github" class="group">
+      <div class="group-head">
+        <h2>GitHub</h2>
+        {githubSignIn ? (
+          <div class="actions">
+            <a class="button quiet" href="/github/connect">
+              Link existing
+            </a>
+            <a class="button" href="/github/install">
+              Install the GitHub App
+            </a>
+          </div>
+        ) : null}
+      </div>
+      <ul class="rows">
+        {installations.length === 0 ? (
+          <li class="empty">
+            Link GitHub so your sandbox can clone and push to your repositories.
+          </li>
+        ) : (
+          installations.map((installation) => (
+            <InstallationRow installation={installation} githubAccount={githubAccount} />
+          ))
+        )}
+      </ul>
+      {githubSignIn ? null : <p class="hint group-note">Ask the admin to link more accounts.</p>}
     </section>
   );
 }
 
-function describeStatus(status: ServerStatus | null): string {
+function InstallationRow({
+  installation,
+  githubAccount,
+}: {
+  installation: Installation;
+  githubAccount: GithubAccount | null;
+}) {
+  const login = installation.accountLogin;
+  return (
+    <li class="row">
+      {login ? <img class="avatar" src={githubAvatar(login)} alt="" /> : <span class="avatar" />}
+      <div class="grow">
+        <strong>{login ?? `Installation ${installation.installationId}`}</strong>
+        <span class="sub">{accountKind(login, githubAccount)}</span>
+      </div>
+      <form method="post" action={`/github/installations/${installation.installationId}/delete`}>
+        <button class="button quiet">Unlink</button>
+      </form>
+    </li>
+  );
+}
+
+function accountKind(login: string | null, githubAccount: GithubAccount | null): string {
+  if (!githubAccount || !login) {
+    return "Linked by the admin";
+  }
+  if (login.toLowerCase() === githubAccount.login.toLowerCase()) {
+    return "Your account";
+  }
+  return "Organization";
+}
+
+function sandboxState(status: ServerStatus | null): SandboxState {
   if (!status) {
     return "unavailable";
   }
   if (status.ready) {
     return "running";
   }
-  return status.running ? "starting" : "asleep (it wakes on the next request)";
+  if (status.running) {
+    return "starting";
+  }
+  return "asleep";
+}
+
+async function statusOrNull(sandbox: SandboxHandle): Promise<ServerStatus | null> {
+  try {
+    return await sandbox.status();
+  } catch (error) {
+    log.warn("sandbox_status_failed", describeError(error));
+    return null;
+  }
 }

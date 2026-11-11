@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@cloudflare/sandbox": "catalog:",
+    "@fontsource-variable/inter": "catalog:",
     "@octokit/auth-app": "catalog:",
     "@opencode/client": "catalog:",
     "drizzle-orm": "catalog:",

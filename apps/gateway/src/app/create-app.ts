@@ -9,7 +9,7 @@ import { HttpStatus } from "@/lib/http";
 
 import { classifyHost } from "./hosts/classify-host.ts";
 
-export type GatewayDeps = AdminVariables & { fetch: typeof fetch };
+export type GatewayDeps = AdminVariables & { fetch: typeof fetch; font: ArrayBuffer | null };
 
 type DepsEnv = { Bindings: Env; Variables: GatewayDeps & { access: unknown } };
 
@@ -20,6 +20,7 @@ export function createApp(resolve: (env: Env) => GatewayDeps) {
     c.set("sandboxes", deps.sandboxes);
     c.set("users", deps.users);
     c.set("fetch", deps.fetch);
+    c.set("font", deps.font);
     c.set("access", accessContext(c));
     await next();
   });

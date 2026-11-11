@@ -1,6 +1,10 @@
 import * as v from "valibot";
 
-const Id = v.pipe(v.string(), v.regex(/^[1-9][0-9]*$/), v.transform(Number));
+export const APP_NAME = "cinder-agent";
+
+const ACCESS_TEAM_DOMAIN_SUFFIX = ".cloudflareaccess.com";
+
+export const IdSchema = v.pipe(v.string(), v.digits(), v.toNumber(), v.integer(), v.minValue(1));
 
 const PrivateKey = v.pipe(
   v.string(),
@@ -14,7 +18,7 @@ const GithubSchema = v.union(
   [
     v.pipe(
       v.object({
-        GITHUB_APP_ID: Id,
+        GITHUB_APP_ID: IdSchema,
         GITHUB_APP_PRIVATE_KEY: PrivateKey,
       }),
       v.transform((env) => ({
@@ -39,7 +43,7 @@ const GithubSignInSchema = v.union(
   [
     v.pipe(
       v.object({
-        GITHUB_APP_SLUG: v.pipe(Filled, v.regex(/^[a-z0-9-]+$/)),
+        GITHUB_APP_SLUG: v.pipe(Filled, v.slug()),
         GITHUB_CLIENT_ID: Filled,
         GITHUB_CLIENT_SECRET: Filled,
       }),
@@ -75,7 +79,7 @@ const ConfigSchema = v.pipe(
     ADMIN_TOKEN: v.fallback(v.optional(v.pipe(v.string(), v.minLength(1))), undefined),
     ACCESS_AUD: v.fallback(v.optional(v.pipe(v.string(), v.minLength(1))), undefined),
     ACCESS_TEAM_DOMAIN: v.fallback(
-      v.optional(v.pipe(v.string(), v.regex(/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/))),
+      v.optional(v.pipe(v.string(), v.url(), v.check(isAccessTeamDomain))),
       undefined,
     ),
   }),
@@ -100,4 +104,14 @@ export function loadConfig(env: unknown) {
     throw new Error("GitHub sign-in needs GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY too");
   }
   return { ...v.parse(ConfigSchema, env), github, githubSignIn };
+}
+
+function isAccessTeamDomain(value: string): boolean {
+  const url = URL.parse(value);
+  return (
+    url !== null &&
+    url.protocol === "https:" &&
+    url.hostname.endsWith(ACCESS_TEAM_DOMAIN_SUFFIX) &&
+    url.origin === value
+  );
 }

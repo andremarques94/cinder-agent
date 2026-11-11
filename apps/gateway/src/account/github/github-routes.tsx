@@ -1,19 +1,18 @@
 import { Hono, type Context } from "hono";
 import * as v from "valibot";
 
+import { IdSchema } from "@/lib/config";
 import { ErrorCode, GatewayError } from "@/lib/errors";
 import { HttpStatus } from "@/lib/http";
 import { log } from "@/lib/log";
 
 import type { AccountEnv } from "../account-env.ts";
-import { Layout } from "../layout.tsx";
+import { Layout, githubAvatar } from "../layout.tsx";
 import { githubSignIn, type GithubSignIn } from "./github-sign-in.ts";
-import { linkGithub, type LinkResult, type LinkedInstallation } from "./link-github.ts";
+import { linkGithub, type LinkResult } from "./link-github.ts";
 import { newOauthState, rememberOauthState, takeOauthVerifier } from "./oauth-state.ts";
 
 const CALLBACK_PATH = "/github/callback";
-
-const InstallationIdSchema = v.pipe(v.string(), v.regex(/^[1-9][0-9]*$/), v.transform(Number));
 
 type AccountContext = Context<AccountEnv>;
 
@@ -39,11 +38,11 @@ export const githubRoutes = new Hono<AccountEnv>()
       notOwned: result.notOwned.map((i) => i.installationId),
       takenByOthers: result.takenByOthers.map((i) => i.installationId),
     });
-    return c.html(<LinkedPage result={result} />);
+    return c.html(<LinkedPage result={result} email={c.var.user.email} />);
   })
 
   .post("/installations/:id/delete", async (c) => {
-    const id = v.safeParse(InstallationIdSchema, c.req.param("id"));
+    const id = v.safeParse(IdSchema, c.req.param("id"));
     if (!id.success || !(await c.var.users.removeInstallation(c.var.user.id, id.output))) {
       throw new GatewayError(ErrorCode.NotFound);
     }
@@ -76,51 +75,47 @@ function callbackUrl(c: AccountContext): string {
   return new URL(CALLBACK_PATH, c.req.url).href;
 }
 
-function LinkedPage({ result }: { result: LinkResult }) {
-  return (
-    <Layout title="GitHub linked">
-      <h1>GitHub linked</h1>
-      <p>
-        Signed in to GitHub as <strong>{result.login}</strong>.
-      </p>
-      <Installations title="Linked" installations={result.linked} />
-      <Installations
-        title="Skipped: you're not the account or an organization admin"
-        installations={result.notOwned}
-      />
-      <Installations title="Skipped: linked to another user" installations={result.takenByOthers} />
-      {result.linked.length === 0 &&
-      result.notOwned.length === 0 &&
-      result.takenByOthers.length === 0 ? (
-        <p class="muted">No installations of the GitHub App were found for this account.</p>
-      ) : null}
-      <p>
-        <a class="button" href="/">
-          Back to the dashboard
-        </a>
-      </p>
-    </Layout>
-  );
-}
+const OUTCOME_TEXT = {
+  linked: "Linked. Your sandbox can push here.",
+  notOwned: "Skipped. Only the account owner or an organization admin can link it.",
+  takenByOthers: "Skipped. Another user already linked it.",
+} as const;
 
-function Installations({
-  title,
-  installations,
-}: {
-  title: string;
-  installations: LinkedInstallation[];
-}) {
-  if (installations.length === 0) {
-    return null;
-  }
+function LinkedPage({ result, email }: { result: LinkResult; email: string }) {
+  const rows = [
+    ...result.linked.map((installation) => ({ installation, text: OUTCOME_TEXT.linked })),
+    ...result.notOwned.map((installation) => ({ installation, text: OUTCOME_TEXT.notOwned })),
+    ...result.takenByOthers.map((installation) => ({
+      installation,
+      text: OUTCOME_TEXT.takenByOthers,
+    })),
+  ];
   return (
-    <>
-      <p>{title}:</p>
-      <ul>
-        {installations.map((installation) => (
-          <li>{installation.login}</li>
-        ))}
+    <Layout title="GitHub" viewer={{ email, avatar: githubAvatar(result.login) }} page="github">
+      <h2 class="title">Signed in to GitHub as {result.login}</h2>
+      <p class="lede">Here's what happened to each account with the GitHub App installed.</p>
+      <ul class="rows group">
+        {rows.length === 0 ? (
+          <li class="empty">
+            None of your accounts or organizations has the GitHub App installed yet.
+          </li>
+        ) : (
+          rows.map(({ installation, text }) => (
+            <li class="row">
+              <img class="avatar" src={githubAvatar(installation.login)} alt="" />
+              <div class="grow">
+                <strong>{installation.login}</strong>
+                <span class="sub">{text}</span>
+              </div>
+            </li>
+          ))
+        )}
       </ul>
-    </>
+      <div class="actions group">
+        <a class="button primary" href="/">
+          Back to overview
+        </a>
+      </div>
+    </Layout>
   );
 }
