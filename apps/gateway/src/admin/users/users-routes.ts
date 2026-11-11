@@ -16,7 +16,20 @@ const NewUserSchema = v.object({
 });
 
 export const usersRoutes = new Hono<AdminEnv>()
-  .get("/", async (c) => c.json(await c.var.users.list()))
+  .get("/", async (c) => {
+    const [users, installations] = await Promise.all([
+      c.var.users.list(),
+      c.var.users.allInstallations(),
+    ]);
+    return c.json(
+      users.map((user) => ({
+        ...user,
+        installationIds: installations
+          .filter((installation) => installation.userId === user.id)
+          .map((installation) => installation.installationId),
+      })),
+    );
+  })
 
   .post("/", async (c) => {
     const user = await c.var.users.create(await requestBody(c, NewUserSchema));

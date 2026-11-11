@@ -3,6 +3,8 @@ export {
   d1UserStore,
   userStore,
   type Database,
+  type GithubAccount,
+  type Installation,
   type User,
   type UserStore,
 } from "./store/user-store.ts";

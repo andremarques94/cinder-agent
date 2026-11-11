@@ -19,7 +19,6 @@ test("a new user gets a random id and is found by id, email (any case) and sandb
     sandbox: "ada",
     createdAt: 1_000,
     lastLoginAt: null,
-    installationId: null,
   });
   expect(ada.id).not.toBe("ada");
   expect(await users.byId(ada.id)).toEqual(ada);
@@ -42,7 +41,8 @@ test("emails and sandbox names are unique", async () => {
 test("a deleted user's sandbox name is retired and never handed out again", async () => {
   const users = store();
   const ada = await users.create({ email: "ada@example.com", sandbox: "ada" });
-  await users.setInstallation(ada.id, 7, "ada");
+  await users.claimInstallation(ada.id, 7, "ada");
+  await users.linkGithubAccount(ada.id, { githubUserId: 1, login: "ada" });
   expect(await users.delete(ada.id)).toMatchObject({ sandbox: "ada" });
   expect(await users.bySandbox("ada")).toBeNull();
   expect(await users.delete(ada.id)).toBeNull();
@@ -51,28 +51,63 @@ test("a deleted user's sandbox name is retired and never handed out again", asyn
   );
   const again = await users.create({ email: "ada@example.com", sandbox: "ada-2" });
   expect(again.id).not.toBe(ada.id);
-  expect(again.installationId).toBeNull();
+  expect(await users.installations(again.id)).toEqual([]);
+  expect(await users.githubAccount(again.id)).toBeNull();
+  expect(await users.allInstallations()).toEqual([]);
 });
 
-test("each user has at most one installation, and an installation belongs to one user", async () => {
+test("a user can claim many installations, and each installation belongs to one user", async () => {
+  let clock = 1_000;
+  const users = userStore(migratedDatabase(), () => clock++);
+  const ada = await users.create({ email: "ada@example.com", sandbox: "ada" });
+  const bob = await users.create({ email: "bob@example.com", sandbox: "bob" });
+
+  expect(await users.claimInstallation(ada.id, 8, "ada-org")).toBe(true);
+  expect(await users.claimInstallation(ada.id, 7, "ada")).toBe(true);
+  expect(await users.claimInstallation(ada.id, 7, "ada-renamed")).toBe(true);
+  expect(await users.installations(ada.id)).toEqual([
+    { installationId: 8, accountLogin: "ada-org", createdAt: 1_002 },
+    { installationId: 7, accountLogin: "ada-renamed", createdAt: 1_003 },
+  ]);
+
+  expect(await users.claimInstallation(bob.id, 8, "stolen")).toBe(false);
+  expect(await users.installations(bob.id)).toEqual([]);
+  expect((await users.installations(ada.id))[0]).toMatchObject({ accountLogin: "ada-org" });
+  expect((await users.allInstallations()).map((i) => [i.userId, i.installationId])).toEqual([
+    [ada.id, 8],
+    [ada.id, 7],
+  ]);
+
+  await expect(users.claimInstallation("missing", 9, null)).rejects.toEqual(
+    rejectsWith(ErrorCode.NotFound),
+  );
+
+  expect(await users.removeInstallation(bob.id, 8)).toBe(false);
+  expect(await users.removeInstallation(ada.id, 8)).toBe(true);
+  expect(await users.claimInstallation(bob.id, 8, "bob-org")).toBe(true);
+  await users.clearInstallations(ada.id);
+  expect(await users.installations(ada.id)).toEqual([]);
+  expect(await users.installations(bob.id)).toHaveLength(1);
+});
+
+test("a GitHub account links to one user; relinking replaces it", async () => {
   const users = store();
   const ada = await users.create({ email: "ada@example.com", sandbox: "ada" });
   const bob = await users.create({ email: "bob@example.com", sandbox: "bob" });
-  await users.setInstallation(ada.id, 7, "ada");
-  await users.setInstallation(ada.id, 8, "ada-org");
-  expect((await users.byId(ada.id))?.installationId).toBe(8);
+  expect(await users.githubAccount(ada.id)).toBeNull();
 
-  await expect(users.setInstallation(bob.id, 8, null)).rejects.toEqual(
-    rejectsWith(ErrorCode.Conflict),
+  await users.linkGithubAccount(ada.id, { githubUserId: 1, login: "ada" });
+  await users.linkGithubAccount(ada.id, { githubUserId: 2, login: "ada-work" });
+  expect(await users.githubAccount(ada.id)).toEqual({ githubUserId: 2, login: "ada-work" });
+
+  await expect(users.linkGithubAccount(bob.id, { githubUserId: 2, login: "x" })).rejects.toEqual(
+    rejectsWith(ErrorCode.GithubAccountTaken),
   );
-  expect((await users.byId(ada.id))?.installationId).toBe(8);
-  expect((await users.byId(bob.id))?.installationId).toBeNull();
-
-  await expect(users.setInstallation("missing", 9, null)).rejects.toEqual(
+  await users.linkGithubAccount(bob.id, { githubUserId: 1, login: "ada" });
+  expect(await users.githubAccount(bob.id)).toEqual({ githubUserId: 1, login: "ada" });
+  await expect(users.linkGithubAccount("missing", { githubUserId: 3, login: "x" })).rejects.toEqual(
     rejectsWith(ErrorCode.NotFound),
   );
-  await users.clearInstallation(ada.id);
-  expect((await users.byId(ada.id))?.installationId).toBeNull();
 });
 
 test("list and recordLogin", async () => {

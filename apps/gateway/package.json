@@ -16,6 +16,7 @@
     "@opencode/client": "catalog:",
     "drizzle-orm": "catalog:",
     "hono": "catalog:",
+    "uqr": "catalog:",
     "valibot": "catalog:"
   },
   "devDependencies": {

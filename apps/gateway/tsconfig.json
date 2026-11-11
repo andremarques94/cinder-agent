@@ -12,6 +12,8 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noEmit": true,

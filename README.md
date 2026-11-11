@@ -51,7 +51,7 @@ The gateway looks up which user owns `<name>.<domain>` in D1 and routes to that 
 Object (named by the user's ID, not the sandbox name), which starts the container, restores
 `/persist` from R2 and proxies requests to `opencode serve`. The container only has a placeholder
 GitHub token; its traffic to GitHub goes through `GithubOutbound`, which adds a short-lived token
-for that user's GitHub App installation.
+from the user's GitHub App installation for the repository's owner.
 
 **Work in progress.** See [PLAN.md](PLAN.md) for what's next.
 
@@ -107,8 +107,8 @@ for that user's GitHub App installation.
    ```
 
 7. Invite yourself (see [Users](#users)), open `https://app.<your-domain>`, sign in and press
-   **Pair a device**. The link is valid 5 minutes and works once; open it in a browser or paste it
-   into the OpenCode desktop app.
+   **Pair a device**. Scan the QR code with the [OpenCode iOS app](https://opencode.ai/mobile), or
+   paste the link into the OpenCode desktop app or a browser. It works once, within 5 minutes.
 
 ## Sign-in
 
@@ -119,15 +119,18 @@ OpenCode's pairing instead.
 1. In Zero Trust, add [GitHub as a login method](https://developers.cloudflare.com/cloudflare-one/integrations/identity-providers/github/).
 2. Add a self-hosted application for the hostname `app.<your-domain>` only, with GitHub as its
    login method and an Allow policy listing the emails (or GitHub organization) you invite.
-3. Copy the application's Audience (AUD) tag into `ACCESS_AUD` in `wrangler.jsonc`.
+3. Copy the application's Audience (AUD) tag into `ACCESS_AUD` in `wrangler.jsonc`, and your team
+   domain (`https://<team>.cloudflareaccess.com`) into `ACCESS_TEAM_DOMAIN`.
 
 The gateway reads the signed-in email from [`ctx.access`](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
-and only accepts it for that AUD tag. Someone who passes Access but hasn't been invited gets 403.
+and only accepts it for that AUD tag. Where `ctx.access` isn't set (Workers with Static Assets), it
+[checks the `Cf-Access-Jwt-Assertion` header](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)
+against the team domain instead. Someone who passes Access but hasn't been invited gets 403.
 
 ## Users
 
-Each user has an email (what Access signs them in with), a sandbox name (their subdomain) and at
-most one GitHub App installation. With `A="Authorization: Bearer <ADMIN_TOKEN>"` and
+Each user has an email (what Access signs them in with), a sandbox name (their subdomain), and
+any number of GitHub App installations, each linked to one user. With `A="Authorization: Bearer <ADMIN_TOKEN>"` and
 `GW=https://<worker>.workers.dev`:
 
 ```bash
@@ -139,44 +142,61 @@ curl -H "$A" $GW/admin/users
 ```
 
 ```bash
-curl -X PUT -H "$A" -H 'content-type: application/json' -d '{"installationId":12345678}' $GW/admin/users/<id>/github
+curl -X PUT -H "$A" -H 'content-type: application/json' -d '{"installationId":12345678,"accountLogin":"ada"}' $GW/admin/users/<id>/github
 ```
 
 ```bash
 curl -X DELETE -H "$A" $GW/admin/users/<id>
 ```
 
-Deleting a user destroys their container, backup and sandbox state, and retires the sandbox name
-so it is never given to anyone else. Remove them from the Access policy too. The admin can also
+`PUT …/github` links one more installation (`accountLogin` is the account it's on, used to pick
+it by repository owner); `DELETE …/github` unlinks them all. Deleting a user destroys their
+container, backup and sandbox state, and retires the sandbox name so it is never given to anyone
+else. Remove them from the Access policy too. The admin can also
 pair, check or stop any sandbox with `POST /admin/sandboxes/<name>/pair`, `GET` and `DELETE
 /admin/sandboxes/<name>`.
 
 ## GitHub
 
 Sandboxes can clone, push and open pull requests as your own GitHub App. The sandbox only has a
-placeholder token; the gateway swaps in a short-lived installation token on its way to GitHub.
+placeholder token; the gateway swaps in a short-lived installation token on its way to GitHub,
+picked by the repository's owner. Users install the App from the dashboard, on their own account
+and on organizations they're an admin of.
 
 1. [Create a GitHub App](https://github.com/settings/apps/new) with webhooks off and these
-   repository permissions: Contents, Pull requests, Issues and Checks (read and write).
-2. Install it on your repositories, and have each user install it on theirs. The installation ID
-   is the number at the end of the installation's settings URL. Link it to the user with
-   `PUT /admin/users/<id>/github` (see [Users](#users)).
-3. Generate a private key and convert it to PKCS#8:
+   permissions: repository Contents, Pull requests, Issues and Checks (read and write), and
+   organization Members (read), which shows who is an organization admin.
+2. Under **Identifying and authorizing users**, add the callback URL
+   `https://app.<your-domain>/github/callback` (and `http://app.localhost:8787/github/callback`
+   for local development). Leave **Request user authorization (OAuth) during installation** off.
+3. Under **Post installation**, set the setup URL to `https://app.<your-domain>/github/setup` and
+   tick **Redirect on update**. Make the App public if users install it on accounts other than
+   yours.
+4. Generate a private key and convert it to PKCS#8:
 
    ```bash
    openssl pkcs8 -topk8 -nocrypt -in app.private-key.pem -out app.pkcs8.pem
    ```
 
-4. Set `GITHUB_APP_ID` in `wrangler.jsonc`, and add the key to
-   `.secrets.env` on one line:
+5. Set `GITHUB_APP_ID`, `GITHUB_APP_SLUG` (the App's URL name) and `GITHUB_CLIENT_ID` in
+   `wrangler.jsonc`. Generate a client secret, then add it and the key to `.secrets.env`:
 
    ```bash
    printf 'GITHUB_APP_PRIVATE_KEY="%s"\n' "$(awk '{printf "%s\\n", $0}' app.pkcs8.pem)" >> apps/gateway/.secrets.env
    ```
 
+   ```bash
+   echo "GITHUB_CLIENT_SECRET=<client secret>" >> apps/gateway/.secrets.env
+   ```
+
+On the dashboard, **Install the GitHub App** installs it, then signs in to GitHub to prove who owns
+the installation; **Link installations you already have** only signs in. The gateway keeps no
+GitHub user token. Without the slug, client ID and secret, the admin links installations with
+`PUT /admin/users/<id>/github` instead (see [Users](#users)).
+
 Inside the sandbox, `git` and `gh` work as usual. Commits and pull requests show up as
-`<app-name>[bot]`. A sandbox picks up a changed installation when it next starts; to restart it now,
-stop it with `DELETE /admin/sandboxes/<name>`.
+`<app-name>[bot]`. Calls whose URL names no repository, such as `gh pr create` (GraphQL), get the
+token for the user's own account, so they may fail on repositories in other installations.
 
 ## Local development
 
@@ -188,8 +208,9 @@ cp apps/gateway/.dev.vars.example apps/gateway/.dev.vars
 vp run dev
 ```
 
-`vp run dev` creates the local D1 tables. Invite a user (`scripts/smoke.sh` invites
+An older `.dev.vars` needs a `GITHUB_CLIENT_SECRET=` line (empty is fine), since `wrangler.jsonc`
+lists it as required. `vp run dev` creates the local D1 tables. Invite a user (`scripts/smoke.sh` invites
 `me@example.com` as `me`), then sandboxes are at `http://<name>.localhost:8787`.
-`http://app.localhost:8787` signs you in as the `access.dev` identity in `wrangler.jsonc`; change
+`http://app.localhost:8787` is the dashboard, signed in as the `access.dev` identity in `wrangler.jsonc`; change
 its email to act as another user. `vp run ready` runs the checks, [knip](https://knip.dev) and the
 tests. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.

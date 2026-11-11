@@ -33,13 +33,19 @@ export class OpencodeSandbox extends DurableObject<Env> {
       ctx.storage,
     );
     const users = d1UserStore(env.DB);
-    this.server = new OpencodeServer(ctx, loadConfig(env), backups, this.activity, async () => {
-      const user = await users.byId(userId);
-      if (!user) {
-        throw new GatewayError(ErrorCode.NotFound, { details: { reason: "user deleted" } });
-      }
-      return user.installationId;
-    });
+    this.server = new OpencodeServer(
+      ctx,
+      loadConfig(env),
+      backups,
+      this.activity,
+      userId,
+      async () => {
+        if (!(await users.byId(userId))) {
+          throw new GatewayError(ErrorCode.NotFound, { details: { reason: "user deleted" } });
+        }
+        return (await users.installations(userId))[0]?.installationId ?? null;
+      },
+    );
   }
 
   override async fetch(request: Request): Promise<Response> {

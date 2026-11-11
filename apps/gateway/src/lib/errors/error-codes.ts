@@ -16,13 +16,25 @@ export const ErrorCode = {
   SandboxRestoreFailed: "sandbox_restore_failed",
   SandboxSaveFailed: "sandbox_save_failed",
   GithubUnavailable: "github_unavailable",
+  GithubSignInNotConfigured: "github_sign_in_not_configured",
+  GithubStateMismatch: "github_state_mismatch",
+  GithubSignInFailed: "github_sign_in_failed",
+  GithubAccountTaken: "github_account_taken",
   Internal: "internal",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
+export type ErrorStatus = Exclude<
+  HttpStatus,
+  | typeof HttpStatus.SwitchingProtocols
+  | typeof HttpStatus.Created
+  | typeof HttpStatus.NoContent
+  | typeof HttpStatus.SeeOther
+>;
+
 interface ErrorDefinition {
-  status: HttpStatus;
+  status: ErrorStatus;
   message: string;
 }
 
@@ -77,6 +89,22 @@ export const errorDefinitions: Record<ErrorCode, ErrorDefinition> = {
   github_unavailable: {
     status: HttpStatus.BadGateway,
     message: "GitHub did not accept the app's credentials.",
+  },
+  github_sign_in_not_configured: {
+    status: HttpStatus.NotFound,
+    message: "GitHub sign-in is not set up on this gateway.",
+  },
+  github_state_mismatch: {
+    status: HttpStatus.BadRequest,
+    message: "The GitHub sign-in expired or came from another browser. Start again.",
+  },
+  github_sign_in_failed: {
+    status: HttpStatus.BadGateway,
+    message: "GitHub sign-in did not complete. Start again.",
+  },
+  github_account_taken: {
+    status: HttpStatus.Conflict,
+    message: "That GitHub account is already linked to another user.",
   },
   internal: { status: HttpStatus.InternalServerError, message: "Something went wrong." },
 };

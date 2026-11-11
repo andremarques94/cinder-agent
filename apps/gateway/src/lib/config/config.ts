@@ -33,6 +33,34 @@ const GithubSchema = v.union(
   "set both GITHUB_APP_ID and a PKCS#8 GITHUB_APP_PRIVATE_KEY, or neither",
 );
 
+const Filled = v.pipe(v.string(), v.trim(), v.nonEmpty());
+
+const GithubSignInSchema = v.union(
+  [
+    v.pipe(
+      v.object({
+        GITHUB_APP_SLUG: v.pipe(Filled, v.regex(/^[a-z0-9-]+$/)),
+        GITHUB_CLIENT_ID: Filled,
+        GITHUB_CLIENT_SECRET: Filled,
+      }),
+      v.transform((env) => ({
+        slug: env.GITHUB_APP_SLUG,
+        clientId: env.GITHUB_CLIENT_ID,
+        clientSecret: env.GITHUB_CLIENT_SECRET,
+      })),
+    ),
+    v.pipe(
+      v.object({
+        GITHUB_APP_SLUG: Unset,
+        GITHUB_CLIENT_ID: Unset,
+        GITHUB_CLIENT_SECRET: Unset,
+      }),
+      v.transform(() => null),
+    ),
+  ],
+  "set all of GITHUB_APP_SLUG, GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET, or none",
+);
+
 const ConfigSchema = v.pipe(
   v.object({
     SANDBOX_DOMAIN: v.pipe(v.string(), v.minLength(1), v.toLowerCase()),
@@ -46,6 +74,10 @@ const ConfigSchema = v.pipe(
     ),
     ADMIN_TOKEN: v.fallback(v.optional(v.pipe(v.string(), v.minLength(1))), undefined),
     ACCESS_AUD: v.fallback(v.optional(v.pipe(v.string(), v.minLength(1))), undefined),
+    ACCESS_TEAM_DOMAIN: v.fallback(
+      v.optional(v.pipe(v.string(), v.regex(/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/))),
+      undefined,
+    ),
   }),
   v.transform((env) => ({
     sandboxDomain: env.SANDBOX_DOMAIN,
@@ -53,12 +85,19 @@ const ConfigSchema = v.pipe(
     inactivityTimeoutMs: env.INACTIVITY_TIMEOUT_MINUTES * 60_000,
     adminToken: env.ADMIN_TOKEN,
     accessAud: env.ACCESS_AUD,
+    accessTeamDomain: env.ACCESS_TEAM_DOMAIN,
   })),
 );
 
 export type Config = ReturnType<typeof loadConfig>;
 export type GithubConfig = NonNullable<Config["github"]>;
+export type GithubSignInConfig = NonNullable<Config["githubSignIn"]>;
 
 export function loadConfig(env: unknown) {
-  return { ...v.parse(ConfigSchema, env), github: v.parse(GithubSchema, env) };
+  const github = v.parse(GithubSchema, env);
+  const githubSignIn = v.parse(GithubSignInSchema, env);
+  if (githubSignIn && !github) {
+    throw new Error("GitHub sign-in needs GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY too");
+  }
+  return { ...v.parse(ConfigSchema, env), github, githubSignIn };
 }

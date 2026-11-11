@@ -5,8 +5,9 @@ import { drizzle } from "drizzle-orm/sqlite-proxy";
 import type { Database } from "@/users";
 
 import users from "../users/migrations/0000_users.sql?raw";
+import githubAccounts from "../users/migrations/0001_github_accounts.sql?raw";
 
-const MIGRATIONS = [users];
+const MIGRATIONS = [users, githubAccounts];
 
 type Method = "run" | "all" | "values" | "get";
 

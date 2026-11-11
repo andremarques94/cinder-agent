@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import * as v from "valibot";
 
+import { ErrorCode, GatewayError } from "@/lib/errors";
 import { HttpStatus } from "@/lib/http";
 
 import type { AdminEnv } from "../admin-env.ts";
@@ -16,12 +17,14 @@ export const githubRoutes = new Hono<AdminEnv>()
   .put("/", async (c) => {
     const user = await requireUser(c);
     const { installationId, accountLogin } = await requestBody(c, InstallationSchema);
-    await c.var.users.setInstallation(user.id, installationId, accountLogin);
+    if (!(await c.var.users.claimInstallation(user.id, installationId, accountLogin))) {
+      throw new GatewayError(ErrorCode.Conflict);
+    }
     return c.body(null, HttpStatus.NoContent);
   })
 
   .delete("/", async (c) => {
     const user = await requireUser(c);
-    await c.var.users.clearInstallation(user.id);
+    await c.var.users.clearInstallations(user.id);
     return c.body(null, HttpStatus.NoContent);
   });

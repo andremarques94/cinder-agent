@@ -10,6 +10,7 @@ test("loadConfig parses the whole environment", () => {
       INACTIVITY_TIMEOUT_MINUTES: "10",
       ADMIN_TOKEN: "secret",
       ACCESS_AUD: "aud-tag",
+      ACCESS_TEAM_DOMAIN: "https://team.cloudflareaccess.com",
     }),
   ).toEqual({
     sandboxDomain: "example.com",
@@ -17,7 +18,9 @@ test("loadConfig parses the whole environment", () => {
     inactivityTimeoutMs: 600_000,
     adminToken: "secret",
     accessAud: "aud-tag",
+    accessTeamDomain: "https://team.cloudflareaccess.com",
     github: null,
+    githubSignIn: null,
   });
 });
 
@@ -29,8 +32,10 @@ test("optional settings fall back to defaults", () => {
       INACTIVITY_TIMEOUT_MINUTES: "0",
       ADMIN_TOKEN: "",
       ACCESS_AUD: "",
+      ACCESS_TEAM_DOMAIN: "https://team.cloudflareaccess.com/",
     }),
   ).toMatchObject({
+    accessTeamDomain: undefined,
     instance: "standard-1",
     inactivityTimeoutMs: 30 * 60_000,
     adminToken: undefined,
@@ -62,5 +67,28 @@ test("partial GitHub App settings or a PKCS#1 key are an error", () => {
   expect(() => loadConfig(env)).toThrow("set both GITHUB_APP_ID");
   expect(() => loadConfig({ ...env, GITHUB_APP_PRIVATE_KEY: pem("RSA PRIVATE KEY") })).toThrow(
     "PKCS#8",
+  );
+});
+
+const app = { SANDBOX_DOMAIN: "example.com", GITHUB_APP_ID: "12", GITHUB_APP_PRIVATE_KEY: KEY };
+
+test("GitHub sign-in settings are read together and need the App", () => {
+  const signIn = {
+    GITHUB_APP_SLUG: "cinder-agent",
+    GITHUB_CLIENT_ID: "Iv23li",
+    GITHUB_CLIENT_SECRET: "client-secret",
+  };
+  expect(loadConfig(app).githubSignIn).toBeNull();
+  expect(loadConfig({ ...app, ...signIn }).githubSignIn).toEqual({
+    slug: "cinder-agent",
+    clientId: "Iv23li",
+    clientSecret: "client-secret",
+  });
+  expect(() => loadConfig({ ...app, GITHUB_CLIENT_ID: "Iv23li" })).toThrow(
+    "set all of GITHUB_APP_SLUG",
+  );
+  expect(() => loadConfig({ ...app, ...signIn, GITHUB_APP_SLUG: "Not A Slug" })).toThrow();
+  expect(() => loadConfig({ SANDBOX_DOMAIN: "example.com", ...signIn })).toThrow(
+    "needs GITHUB_APP_ID",
   );
 });

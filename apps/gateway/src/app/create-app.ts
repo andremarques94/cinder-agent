@@ -2,14 +2,14 @@ import { Hono, type Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 
-import { accountRoutes, type AccountVariables } from "@/account";
+import { ErrorPage, accountRoutes, type AccountVariables } from "@/account";
 import { adminRoutes, type AdminVariables } from "@/admin";
-import { ErrorCode, GatewayError, errorResponse } from "@/lib/errors";
+import { ErrorCode, GatewayError, errorResponse, publicError } from "@/lib/errors";
 import { HttpStatus } from "@/lib/http";
 
 import { classifyHost } from "./hosts/classify-host.ts";
 
-export type GatewayDeps = AdminVariables;
+export type GatewayDeps = AdminVariables & { fetch: typeof fetch };
 
 type DepsEnv = { Bindings: Env; Variables: GatewayDeps & { access: unknown } };
 
@@ -19,6 +19,7 @@ export function createApp(resolve: (env: Env) => GatewayDeps) {
     c.set("config", deps.config);
     c.set("sandboxes", deps.sandboxes);
     c.set("users", deps.users);
+    c.set("fetch", deps.fetch);
     c.set("access", accessContext(c));
     await next();
   });
@@ -27,7 +28,13 @@ export function createApp(resolve: (env: Env) => GatewayDeps) {
     .use(provide)
     .route("/", accountRoutes)
     .notFound(notFound)
-    .onError(onError);
+    .onError((error, c) => {
+      if (!c.req.header("accept")?.includes("text/html")) {
+        return onError(error);
+      }
+      const { status, message } = publicError(fromHono(error));
+      return c.html(ErrorPage({ message }), status);
+    });
 
   const gateway = new Hono<DepsEnv>()
     .use(provide)

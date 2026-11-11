@@ -7,6 +7,7 @@ export interface AccountVariables {
   sandboxes: SandboxDirectory;
   users: UserStore;
   access: unknown;
+  fetch: typeof fetch;
   user: User;
 }
 
