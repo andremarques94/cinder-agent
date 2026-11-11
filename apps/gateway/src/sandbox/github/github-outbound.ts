@@ -22,6 +22,10 @@ export class GithubOutbound extends WorkerEntrypoint<Env, GithubOutboundProps> {
       const app = githubApp(github);
       const users = d1UserStore(this.env.DB);
       const { userId } = this.ctx.props;
+      const user = await users.byId(userId);
+      if (!user || user.deletingAt !== null) {
+        throw new GatewayError(ErrorCode.NotFound, { details: { reason: "user deleted" } });
+      }
       const authorized = await authorizeGithubRequest(request, async (owner) => {
         const [installations, account] = await Promise.all([
           users.installations(userId),

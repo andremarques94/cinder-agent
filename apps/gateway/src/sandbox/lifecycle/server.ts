@@ -18,6 +18,9 @@ const STARTUP_DEADLINE_MS = 60_000;
 const READY_POLL_INTERVAL_MS = 500;
 const INFO_TIMEOUT_MS = 2_000;
 const IDLE_CHECK_INTERVAL_MS = 60_000;
+const DELETED_KEY = "deleted-at";
+// https://developers.cloudflare.com/durable-objects/api/legacy-kv-storage-api/#delete
+const DELETE_BATCH = 128;
 
 export type ServerConfig = Pick<Config, "instance" | "inactivityTimeoutMs">;
 
@@ -43,7 +46,8 @@ export interface ServerStorage extends PasswordStore {
   getAlarm(): Promise<number | null>;
   setAlarm(scheduledTime: number): Promise<void>;
   deleteAlarm(): Promise<void>;
-  deleteAll(): Promise<void>;
+  list(): Promise<Map<string, unknown>>;
+  delete(keys: string[]): Promise<number>;
 }
 
 export interface ServerDeps {
@@ -81,6 +85,7 @@ export class OpencodeServer {
   private ready = false;
   private password: string | null = null;
   private destroying = false;
+  private deleted = false;
 
   constructor(deps: ServerDeps) {
     this.container = deps.container;
@@ -102,7 +107,7 @@ export class OpencodeServer {
   }
 
   async ensureReady(): Promise<RunningServer> {
-    if (!this.transitions.busy && this.container.running && this.ready) {
+    if (!this.deleted && !this.transitions.busy && this.container.running && this.ready) {
       return this.connect();
     }
     return this.transitions.run("start", () => this.startOnce());
@@ -145,22 +150,44 @@ export class OpencodeServer {
     await this.scheduleIdleCheck();
   }
 
+  // The deleted mark is written before teardown and never removed, so no start queued behind
+  // this one, and none after the Durable Object restarts mid-cleanup, can bring the container
+  // back.
   private async destroyNow(): Promise<undefined> {
+    this.deleted = true;
     this.ready = false;
+    if ((await this.storage.get(DELETED_KEY)) === undefined) {
+      await this.storage.put(DELETED_KEY, `${Date.now()}`);
+    }
     if (this.container.running) {
       this.destroying = true;
       await this.container.destroy();
     }
     await this.backups.deleteLatest();
     await this.storage.deleteAlarm();
-    await this.storage.deleteAll();
+    await this.deleteAllButDeletedMark();
     this.password = null;
     log.info("sandbox_destroyed", {});
     return undefined;
   }
 
+  private async deleteAllButDeletedMark(): Promise<void> {
+    const keys = [...(await this.storage.list()).keys()].filter((key) => key !== DELETED_KEY);
+    for (let start = 0; start < keys.length; start += DELETE_BATCH) {
+      await this.storage.delete(keys.slice(start, start + DELETE_BATCH));
+    }
+  }
+
+  private async isDeleted(): Promise<boolean> {
+    this.deleted ||= (await this.storage.get(DELETED_KEY)) !== undefined;
+    return this.deleted;
+  }
+
   // https://developers.cloudflare.com/containers/guides/migrate-to-durable-object-container-api/
   private async startOnce(): Promise<RunningServer> {
+    if (await this.isDeleted()) {
+      throw new GatewayError(ErrorCode.NotFound, { details: { reason: "sandbox deleted" } });
+    }
     if (this.container.running && this.ready) {
       return this.connect();
     }

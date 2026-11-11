@@ -1,4 +1,4 @@
-import { and, asc, eq, type SQL } from "drizzle-orm";
+import { and, asc, eq, isNull, type SQL } from "drizzle-orm";
 import type { BatchItem, BatchResponse } from "drizzle-orm/batch";
 import { drizzle } from "drizzle-orm/d1";
 import type { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core";
@@ -19,6 +19,7 @@ export interface User {
   sandbox: string;
   createdAt: number;
   lastLoginAt: number | null;
+  deletingAt: number | null;
 }
 
 export interface Installation {
@@ -48,6 +49,7 @@ export interface UserStore {
   byEmail(email: string): Promise<User | null>;
   bySandbox(sandbox: string): Promise<User | null>;
   recordLogin(id: string): Promise<void>;
+  markDeleting(id: string): Promise<void>;
   delete(id: string): Promise<User | null>;
   githubAccount(id: string): Promise<GithubAccount | null>;
   linkGithubAccount(id: string, account: GithubAccount): Promise<void>;
@@ -79,8 +81,15 @@ export function d1UserStore(binding: D1Database, now: () => number = Date.now): 
 }
 
 export function userStore(db: Database, now: () => number = Date.now): UserStore {
-  const one = async (where: SQL) =>
-    (await db.select().from(users).where(where).limit(1).all())[0] ?? null;
+  const one = async (...where: SQL[]) =>
+    (
+      await db
+        .select()
+        .from(users)
+        .where(and(...where))
+        .limit(1)
+        .all()
+    )[0] ?? null;
 
   return {
     async create(user) {
@@ -93,16 +102,23 @@ export function userStore(db: Database, now: () => number = Date.now): UserStore
         ]),
         { unique: ErrorCode.Conflict },
       );
-      return { ...created, lastLoginAt: null };
+      return { ...created, lastLoginAt: null, deletingAt: null };
     },
 
     list: () => db.select().from(users).orderBy(asc(users.createdAt)).all(),
     byId: (id) => one(eq(users.id, id)),
-    byEmail: (email) => one(eq(users.email, email.toLowerCase())),
-    bySandbox: (sandbox) => one(eq(users.sandbox, sandbox)),
+    byEmail: (email) => one(eq(users.email, email.toLowerCase()), isNull(users.deletingAt)),
+    bySandbox: (sandbox) => one(eq(users.sandbox, sandbox), isNull(users.deletingAt)),
 
     async recordLogin(id) {
       await db.update(users).set({ lastLoginAt: now() }).where(eq(users.id, id));
+    },
+
+    async markDeleting(id) {
+      await db
+        .update(users)
+        .set({ deletingAt: now() })
+        .where(and(eq(users.id, id), isNull(users.deletingAt)));
     },
 
     async delete(id) {

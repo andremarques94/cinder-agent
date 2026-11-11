@@ -28,12 +28,35 @@ describe("given an empty store", () => {
       sandbox: "ada",
       createdAt: 1_000,
       lastLoginAt: null,
+      deletingAt: null,
     });
     expect(ada.id).not.toBe("ada");
     expect(await users.byId(ada.id)).toEqual(ada);
     expect(await users.byEmail("Ada@Example.com")).toEqual(ada);
     expect(await users.bySandbox("ada")).toEqual(ada);
     expect(await users.bySandbox("bob")).toBeNull();
+  });
+});
+
+describe("given a user being deleted", () => {
+  test("when they are looked up, then only the admin's lookup by id finds them", async () => {
+    const { users, ada } = await twoUsers();
+
+    await users.markDeleting(ada.id);
+
+    expect(await users.byId(ada.id)).toMatchObject({ deletingAt: expect.any(Number) });
+    expect(await users.byEmail(ada.email)).toBeNull();
+    expect(await users.bySandbox(ada.sandbox)).toBeNull();
+  });
+
+  test("when they are marked again, then the first time is kept", async () => {
+    const { users, ada } = await twoUsers();
+    await users.markDeleting(ada.id);
+    const first = (await users.byId(ada.id))?.deletingAt;
+
+    await users.markDeleting(ada.id);
+
+    expect((await users.byId(ada.id))?.deletingAt).toBe(first);
   });
 });
 

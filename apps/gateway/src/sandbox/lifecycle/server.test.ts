@@ -137,13 +137,24 @@ function memoryStorage(): ServerStorage {
     deleteAlarm: async () => {
       alarm = null;
     },
-    deleteAll: async () => {
-      values.clear();
+    list: async () => new Map(values),
+    delete: async (keys) => {
+      let deleted = 0;
+      for (const key of keys) {
+        deleted += values.delete(key) ? 1 : 0;
+      }
+      return deleted;
     },
   };
 }
 
-function setup({ gates = {}, idle = false }: { gates?: Gates; idle?: boolean } = {}) {
+interface Setup {
+  gates?: Gates;
+  idle?: boolean;
+  storage?: ServerStorage;
+}
+
+function setup({ gates = {}, idle = false, storage = memoryStorage() }: Setup = {}) {
   const events: string[] = [];
   const container = new FakeContainer(events, gates);
   const backups: ServerDeps["backups"] = {
@@ -162,7 +173,7 @@ function setup({ gates = {}, idle = false }: { gates?: Gates; idle?: boolean } =
   };
   const server = new OpencodeServer({
     container,
-    storage: memoryStorage(),
+    storage,
     config: { instance: "standard-1", inactivityTimeoutMs: 30 * 60_000 },
     backups,
     activity: { isIdle: () => idle },
@@ -177,7 +188,7 @@ function setup({ gates = {}, idle = false }: { gates?: Gates; idle?: boolean } =
     },
     wait: async () => {},
   });
-  return { server, container, events, backups };
+  return { server, container, events, backups, storage };
 }
 
 async function reached(gate: Gate): Promise<void> {
@@ -330,6 +341,79 @@ describe("given a sandbox that is starting", () => {
 
     expect(container.running).toBe(false);
     expect(events.slice(-2)).toEqual(["container destroyed", "backups deleted"]);
+  });
+});
+
+describe("given a destroyed sandbox", () => {
+  test("when a request arrives, then it is refused and no container starts", async () => {
+    const { server, container } = setup();
+    await server.destroy();
+
+    const request = server.ensureReady();
+
+    await expect(request).rejects.toMatchObject({ code: ErrorCode.NotFound });
+    expect(container.starts).toBe(0);
+  });
+
+  test("when a request was queued behind the destroy, then it doesn't start the container", async () => {
+    const { server, container } = setup();
+    await server.ensureReady();
+
+    const destroy = server.destroy();
+    const request = server.ensureReady();
+    await destroy;
+
+    await expect(request).rejects.toMatchObject({ code: ErrorCode.NotFound });
+    expect(container.running).toBe(false);
+  });
+
+  test("when writing the deleted mark fails, then a later request is refused instead of reaching the running server", async () => {
+    const storage = memoryStorage();
+    const { server, container } = setup({ storage });
+    await server.ensureReady();
+    vi.spyOn(storage, "put").mockRejectedValueOnce(new Error("storage unavailable"));
+    const checked = container.healthChecks;
+
+    await expect(server.destroy()).rejects.toThrow("storage unavailable");
+    const request = server.ensureReady();
+
+    await expect(request).rejects.toMatchObject({ code: ErrorCode.NotFound });
+    expect(container.healthChecks).toBe(checked);
+  });
+
+  test("when cleanup fails and the Durable Object restarts, then a request is still refused", async () => {
+    const storage = memoryStorage();
+    vi.spyOn(storage, "delete").mockRejectedValueOnce(new Error("storage reset"));
+    const first = setup({ storage });
+    await first.server.ensureReady();
+
+    await expect(first.server.destroy()).rejects.toThrow("storage reset");
+    const restarted = setup({ storage });
+    const request = restarted.server.ensureReady();
+
+    await expect(request).rejects.toMatchObject({ code: ErrorCode.NotFound });
+    expect(restarted.container.starts).toBe(0);
+  });
+
+  test("when it is destroyed, then every key but the deleted mark is gone", async () => {
+    const storage = memoryStorage();
+    const { server } = setup({ storage });
+    await server.ensureReady();
+
+    await server.destroy();
+
+    expect([...(await storage.list()).keys()]).toEqual(["deleted-at"]);
+  });
+
+  test("when the Durable Object restarts, then a request is still refused", async () => {
+    const first = setup();
+    await first.server.destroy();
+    const restarted = setup({ storage: first.storage });
+
+    const request = restarted.server.ensureReady();
+
+    await expect(request).rejects.toMatchObject({ code: ErrorCode.NotFound });
+    expect(restarted.container.starts).toBe(0);
   });
 });
 

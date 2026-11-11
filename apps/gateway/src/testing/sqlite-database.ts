@@ -6,8 +6,9 @@ import type { Database } from "@/users";
 
 import users from "../users/migrations/0000_users.sql?raw";
 import githubAccounts from "../users/migrations/0001_github_accounts.sql?raw";
+import userDeleting from "../users/migrations/0002_user_deleting.sql?raw";
 
-const MIGRATIONS = [users, githubAccounts];
+const MIGRATIONS = [users, githubAccounts, userDeleting];
 
 type Method = "run" | "all" | "values" | "get";
 
