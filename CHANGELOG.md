@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.1](https://github.com/andremarques94/cinder-agent/compare/v0.4.0...v0.4.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **gateway:** close admission while a user is being deleted ([#26](https://github.com/andremarques94/cinder-agent/issues/26)) ([38fa69d](https://github.com/andremarques94/cinder-agent/commit/38fa69dd9dc37339ca926d7ff8710b50557fc6be))
+* **gateway:** delete every backup under the user's R2 prefix ([#27](https://github.com/andremarques94/cinder-agent/issues/27)) ([d01326f](https://github.com/andremarques94/cinder-agent/commit/d01326f83d366bc19ed6b007a601b0a910d79521))
+* **gateway:** reject an inactivity timeout above 355 minutes ([#23](https://github.com/andremarques94/cinder-agent/issues/23)) ([93f7f2a](https://github.com/andremarques94/cinder-agent/commit/93f7f2aa9175a65bcb9c288ff6908507d5a53b91))
+* **gateway:** run sandbox start and stop through one lifecycle state machine ([#22](https://github.com/andremarques94/cinder-agent/issues/22)) ([8739a49](https://github.com/andremarques94/cinder-agent/commit/8739a49ea22b8cc6be87064377ac3d2d4ab5c041))
+* remove local agent tooling ([#33](https://github.com/andremarques94/cinder-agent/issues/33)) ([3ad8678](https://github.com/andremarques94/cinder-agent/commit/3ad8678534f06512823d89336d8bd5bc16c1c4f6))
+
 ## [0.4.0](https://github.com/andremarques94/cinder-agent/compare/v0.3.0...v0.4.0) (2026-11-11)
 
 
