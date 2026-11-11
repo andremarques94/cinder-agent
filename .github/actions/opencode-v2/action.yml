@@ -137,13 +137,19 @@ runs:
     - name: Record reviewed head
       id: head
       shell: bash
+      working-directory: pr
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         PR_NUMBER: ${{ inputs.pr-number }}
       run: |
-        head_sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')"
-        [[ "${head_sha}" =~ ^[0-9a-f]{40}$ ]] || exit 1
-        echo "sha=${head_sha}" >> "${GITHUB_OUTPUT}"
+        reviewed_sha="$(git rev-parse HEAD)"
+        [[ "${reviewed_sha}" =~ ^[0-9a-f]{40}$ ]] || exit 1
+        remote_sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')"
+        if [[ "${remote_sha}" != "${reviewed_sha}" ]]; then
+          echo "The pull request changed during the review; refusing to record it." >&2
+          exit 1
+        fi
+        echo "sha=${reviewed_sha}" >> "${GITHUB_OUTPUT}"
 
     - name: Post OpenCode report
       shell: bash
