@@ -118,7 +118,7 @@ placeholder token; the gateway swaps in a short-lived installation token on its 
    ```
 
 Inside the sandbox, `git` and `gh` work as usual. Commits and pull requests show up as
-`<app-name>[bot]`. Restart a running sandbox (`/admin/sandboxes/me/stop`) to pick up changes.
+`<app-name>[bot]`. To pick up changes, stop the sandbox with `DELETE /admin/sandboxes/me`; it restarts on the next request.
 
 ## Local development
 
