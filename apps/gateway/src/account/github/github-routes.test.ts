@@ -53,40 +53,48 @@ const installations = [
   { id: 6, account: null },
 ];
 
+const MEMBERSHIPS: Record<string, { state: string; role: string }> = {
+  "ada-org": { state: "active", role: "admin" },
+  "bob-org": { state: "active", role: "admin" },
+  "member-org": { state: "active", role: "member" },
+};
+
+function githubApiResponse(url: URL): Response {
+  switch (url.pathname) {
+    case "/user":
+      return Response.json({ id: ADA_GITHUB_ID, login: "ada-gh" });
+    case "/user/installations":
+      return Response.json({ total_count: installations.length, installations });
+  }
+  const org = /^\/user\/memberships\/orgs\/(.+)$/.exec(url.pathname)?.[1];
+  const membership = org === undefined ? undefined : MEMBERSHIPS[org];
+  return membership ? Response.json(membership) : new Response("not found", { status: 404 });
+}
+
+function tokenExchange(state: FakeGithub, body: BodyInit | null | undefined, token: unknown) {
+  const sent: unknown = JSON.parse(typeof body === "string" ? body : "{}");
+  expect(sent).toMatchObject({
+    client_id: "client-id",
+    client_secret: "client-secret",
+    code: "the-code",
+    redirect_uri: `${APP}/github/callback`,
+  });
+  if (sent && typeof sent === "object" && "code_verifier" in sent) {
+    state.verifier = String(sent.code_verifier);
+  }
+  return Response.json(token ?? { access_token: "ghu_user", token_type: "bearer" });
+}
+
 function fakeGithub(overrides: { token?: unknown } = {}) {
   const state: FakeGithub = { calls: [], challenge: null, verifier: null };
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : input);
-    const auth = new Headers(init?.headers).get("authorization");
     state.calls.push(`${init?.method ?? "GET"} ${url.host}${url.pathname}`);
     if (url.href === "https://github.com/login/oauth/access_token") {
-      const body: unknown = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
-      expect(body).toMatchObject({
-        client_id: "client-id",
-        client_secret: "client-secret",
-        code: "the-code",
-        redirect_uri: `${APP}/github/callback`,
-      });
-      if (body && typeof body === "object" && "code_verifier" in body) {
-        state.verifier = String(body.code_verifier);
-      }
-      return Response.json(overrides.token ?? { access_token: "ghu_user", token_type: "bearer" });
+      return tokenExchange(state, init?.body, overrides.token);
     }
-    expect(auth).toBe("Bearer ghu_user");
-    if (url.pathname === "/user") {
-      return Response.json({ id: ADA_GITHUB_ID, login: "ada-gh" });
-    }
-    if (url.pathname === "/user/installations") {
-      return Response.json({ total_count: installations.length, installations });
-    }
-    const org = /^\/user\/memberships\/orgs\/(.+)$/.exec(url.pathname)?.[1];
-    if (org === "ada-org" || org === "bob-org") {
-      return Response.json({ state: "active", role: "admin" });
-    }
-    if (org === "member-org") {
-      return Response.json({ state: "active", role: "member" });
-    }
-    return new Response("not found", { status: 404 });
+    expect(new Headers(init?.headers).get("authorization")).toBe("Bearer ghu_user");
+    return githubApiResponse(url);
   };
   return { state, fetcher };
 }
