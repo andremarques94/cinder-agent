@@ -42,11 +42,12 @@ check "sandbox answers at $name.localhost:$port" \
 check "admin status reports ready" \
   sh -c "curl -fsS -m 30 -H 'Authorization: Bearer $token' http://localhost:$port/admin/sandboxes/$name | grep -q '\"ready\":true'"
 
-container="$(docker ps --format '{{.ID}} {{.Image}}' | awk '/opencodesandbox/ { print $1; exit }')"
-if [ -z "$container" ]; then
-  echo "FAIL  no running sandbox container"
+sandboxes="$(docker ps --format '{{.Image}}' | grep -c opencodesandbox)"
+if [ "$sandboxes" -ne 1 ]; then
+  echo "FAIL  $sandboxes sandbox containers are running; stop the others so $name can be found"
   exit 1
 fi
+container="$(docker ps --format '{{.ID}} {{.Image}}' | awk '/opencodesandbox/ { print $1; exit }')"
 
 check "opencode runs in the container" in_container "opencode --version"
 check "workspace is under /persist" in_container "test -d /persist/workspace"
@@ -58,6 +59,29 @@ else
   check "gh reaches GitHub with the app token" test -n "$repo"
   check "commits are authored by the app bot" in_container 'printenv GIT_AUTHOR_NAME | grep -q "\[bot\]$"'
   check "git can read $repo" in_container "git ls-remote https://github.com/$repo HEAD"
+fi
+
+# The container is named after the Durable Object, so the name finds the same sandbox
+# again after it wakes.
+container_name="$(docker inspect --format '{{.Name}}' "$container" | sed 's|^/||')"
+marker_file="$(in_container 'mktemp /persist/workspace/.smoke-stop-wake.XXXXXX' 2> /dev/null)"
+marker="smoke-$(date +%s)"
+check "a new file is written to the workspace" \
+  sh -c "[ -n '$marker_file' ] && docker exec '$container' sh -c 'echo $marker > $marker_file'"
+stop="$(curl -sS -m 180 -o /dev/null -w '%{http_code}' -X DELETE \
+  -H "Authorization: Bearer $token" "http://localhost:$port/admin/sandboxes/$name")"
+check "admin stop saves and stops the sandbox" sh -c "[ '$stop' = 204 ]"
+check "the container is gone after the stop" \
+  sh -c "[ -z \"\$(docker ps -q --filter name=^/$container_name\$)\" ]"
+check "admin status reports stopped" \
+  sh -c "curl -fsS -m 30 -H 'Authorization: Bearer $token' http://localhost:$port/admin/sandboxes/$name | grep -q '\"running\":false'"
+check "sandbox wakes at $name.localhost:$port" \
+  curl -fsS -m 180 -o /dev/null "http://$name.localhost:$port/"
+container="$(docker ps -q --filter "name=^/$container_name\$")"
+check "the same sandbox is running again" test -n "$container"
+if [ -n "$container" ] && [ -n "$marker_file" ]; then
+  check "the file survived the stop and wake" in_container "grep -qx $marker $marker_file"
+  in_container "rm -f $marker_file" > /dev/null 2>&1
 fi
 
 if [ "$failures" -gt 0 ]; then
