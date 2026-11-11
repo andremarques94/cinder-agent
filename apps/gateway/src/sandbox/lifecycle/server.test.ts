@@ -367,6 +367,20 @@ describe("given a destroyed sandbox", () => {
     expect(container.running).toBe(false);
   });
 
+  test("when writing the deleted mark fails, then a later request is refused instead of reaching the running server", async () => {
+    const storage = memoryStorage();
+    const { server, container } = setup({ storage });
+    await server.ensureReady();
+    vi.spyOn(storage, "put").mockRejectedValueOnce(new Error("storage unavailable"));
+    const checked = container.healthChecks;
+
+    await expect(server.destroy()).rejects.toThrow("storage unavailable");
+    const request = server.ensureReady();
+
+    await expect(request).rejects.toMatchObject({ code: ErrorCode.NotFound });
+    expect(container.healthChecks).toBe(checked);
+  });
+
   test("when cleanup fails and the Durable Object restarts, then a request is still refused", async () => {
     const storage = memoryStorage();
     vi.spyOn(storage, "delete").mockRejectedValueOnce(new Error("storage reset"));

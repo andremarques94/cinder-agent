@@ -107,7 +107,7 @@ export class OpencodeServer {
   }
 
   async ensureReady(): Promise<RunningServer> {
-    if (!this.transitions.busy && this.container.running && this.ready) {
+    if (!this.deleted && !this.transitions.busy && this.container.running && this.ready) {
       return this.connect();
     }
     return this.transitions.run("start", () => this.startOnce());
@@ -155,10 +155,10 @@ export class OpencodeServer {
   // back.
   private async destroyNow(): Promise<undefined> {
     this.deleted = true;
+    this.ready = false;
     if ((await this.storage.get(DELETED_KEY)) === undefined) {
       await this.storage.put(DELETED_KEY, `${Date.now()}`);
     }
-    this.ready = false;
     if (this.container.running) {
       this.destroying = true;
       await this.container.destroy();
