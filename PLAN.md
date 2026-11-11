@@ -75,6 +75,11 @@ Legend: **purple = we build**, **teal = OpenCode as-is**, **gray = Cloudflare / 
 - `<user>.<domain>` → gateway → that user's Durable Object → that user's sandbox → `opencode serve`. The gateway adds OpenCode's Basic auth (`opencode:<per-sandbox password>`); users never see that password. Browsers/apps authenticate to their subdomain via **OpenCode's own pairing** (session cookie / token), not via Access, because native OpenCode clients can't complete an Access login.
 - `api.<domain>/github/webhook` → gateway → Workflow.
 
+### Why a container and not the Agents SDK harness
+- Cloudflare Sandboxes (`@cloudflare/sandbox` 1.0) are Containers driven from a Durable Object through `ctx.container`, plus helpers such as `DirectoryBackup`. That is what we use; there is no separate sandbox product to switch to, and the price is Containers pricing.
+- The [Agents SDK](https://developers.cloudflare.com/agents/) is a kit for building your own agent: a harness (Pi, OpenCode, Think) runs the loop inside the Durable Object, and you add tools, channels and a UI. Its `OpenCodeHarness` embeds OpenCode's Workerd SDK, so there is no `opencode serve`: no OpenCode web UI, desktop/TUI/mobile clients or pairing. It also drops OpenCode's shell and file tools, so coding still needs a container (its Sandbox tool is the same `ctx.container`).
+- We run the full `opencode serve` in the container to keep OpenCode's clients, tools and provider logins as-is (§1). Revisit if the harness gains an HTTP server for the official clients.
+
 ## 3. Components
 
 ### 3.1 Sandbox image (`sandbox/`)
@@ -176,6 +181,7 @@ Use `wrangler` (Workers Paid plan required for Sandbox/Containers), TypeScript t
 
 **M6 — GitHub-triggered work**
 - OpenCode GitHub Action on repos (quick win), then webhooks → Workflows → user's sandbox.
+- Consider the Agents SDK `Agent` class as the channel and scheduling layer (GitHub webhooks, later Slack and scheduled jobs such as nightly dependency PRs), driving the user's sandbox through `@opencode/client` instead of writing that plumbing.
 - ✅ Comment "/oc fix this" on an issue → PR appears; open PR → review comment appears.
 
 ## 7. Verify early / open questions
@@ -183,6 +189,8 @@ Use `wrangler` (Workers Paid plan required for Sandbox/Containers), TypeScript t
 - Where OpenCode 2 stores its data/credentials inside the container (path to snapshot).
 - Best way to proxy HTTP + SSE/WebSocket from a Worker into a Sandbox port (preview URLs vs container fetch).
 - Container sleep/idle settings and cost per user; snapshot size limits.
+  - Containers bill per 10 ms while running; memory and disk are charged for the instance size even when idle, CPU only when used. Rough cost for 100 running hours a month: ~$3.50 on `standard-1` (current), ~$0.75 on `basic`; `lite` (256 MiB) is too small, since an idle `opencode serve` uses ~280 MB.
+  - Cheaper levers: allow `basic` in `OPENCODE_INSTANCE` and test it with a real install/build, and lower `INACTIVITY_TIMEOUT_MINUTES` (each session bills 30 idle minutes today).
 - Whether the OpenCode web UI needs any `cors` / base-URL config behind the proxy.
 
 ## 8. References
@@ -196,5 +204,5 @@ Use `wrangler` (Workers Paid plan required for Sandbox/Containers), TypeScript t
 - OpenCode Go: https://opencode.ai/docs/go/
 - Cloudflare Sandbox SDK: https://developers.cloudflare.com/sandbox/
 - Run OpenCode in a Cloudflare sandbox (reference only; uses one-shot `opencode run`): https://developers.cloudflare.com/sandbox/coding-agents/opencode/
-- Cloudflare Agents SDK OpenCode 2 harness (experimental, watch only): https://developers.cloudflare.com/changelog/post/2026-10-12-opencode-harness/
+- Cloudflare Agents SDK and its OpenCode harness (not used for the sandbox; see "Why a container and not the Agents SDK harness" in §2): https://developers.cloudflare.com/agents/harnesses/opencode/
 - Cloudflare Access, D1, R2, Workflows, AI Gateway: https://developers.cloudflare.com/
