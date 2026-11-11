@@ -8,6 +8,8 @@ export const ErrorCode = {
   SandboxStartTimeout: "sandbox_start_timeout",
   SandboxNotResponding: "sandbox_not_responding",
   SandboxUnavailable: "sandbox_unavailable",
+  SandboxRestoreFailed: "sandbox_restore_failed",
+  SandboxSaveFailed: "sandbox_save_failed",
   Internal: "internal",
 } as const;
 
@@ -40,6 +42,14 @@ export const errorDefinitions: Record<ErrorCode, ErrorDefinition> = {
   sandbox_unavailable: {
     status: HttpStatus.ServiceUnavailable,
     message: "The sandbox is unavailable.",
+  },
+  sandbox_restore_failed: {
+    status: HttpStatus.ServiceUnavailable,
+    message: "Your OpenCode sandbox's saved files could not be restored.",
+  },
+  sandbox_save_failed: {
+    status: HttpStatus.ServiceUnavailable,
+    message: "Your OpenCode sandbox could not be saved, so it was left running.",
   },
   internal: { status: HttpStatus.InternalServerError, message: "Something went wrong." },
 };
