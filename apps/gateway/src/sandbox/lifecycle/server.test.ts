@@ -124,8 +124,13 @@ function memoryStorage(): ServerStorage {
     deleteAlarm: async () => {
       alarm = null;
     },
-    deleteAll: async () => {
-      values.clear();
+    list: async () => new Map(values),
+    delete: async (keys) => {
+      let deleted = 0;
+      for (const key of keys) {
+        deleted += values.delete(key) ? 1 : 0;
+      }
+      return deleted;
     },
   };
 }
@@ -347,6 +352,30 @@ describe("given a destroyed sandbox", () => {
 
     await expect(request).rejects.toMatchObject({ code: ErrorCode.NotFound });
     expect(container.running).toBe(false);
+  });
+
+  test("when cleanup fails and the Durable Object restarts, then a request is still refused", async () => {
+    const storage = memoryStorage();
+    vi.spyOn(storage, "delete").mockRejectedValueOnce(new Error("storage reset"));
+    const first = setup({ storage });
+    await first.server.ensureReady();
+
+    await expect(first.server.destroy()).rejects.toThrow("storage reset");
+    const restarted = setup({ storage });
+    const request = restarted.server.ensureReady();
+
+    await expect(request).rejects.toMatchObject({ code: ErrorCode.NotFound });
+    expect(restarted.container.starts).toBe(0);
+  });
+
+  test("when it is destroyed, then every key but the deleted mark is gone", async () => {
+    const storage = memoryStorage();
+    const { server } = setup({ storage });
+    await server.ensureReady();
+
+    await server.destroy();
+
+    expect([...(await storage.list()).keys()]).toEqual(["deleted-at"]);
   });
 
   test("when the Durable Object restarts, then a request is still refused", async () => {

@@ -19,6 +19,8 @@ const READY_POLL_INTERVAL_MS = 500;
 const INFO_TIMEOUT_MS = 2_000;
 const IDLE_CHECK_INTERVAL_MS = 60_000;
 const DELETED_KEY = "deleted-at";
+// https://developers.cloudflare.com/durable-objects/api/legacy-kv-storage-api/#delete
+const DELETE_BATCH = 128;
 
 export type ServerConfig = Pick<Config, "instance" | "inactivityTimeoutMs">;
 
@@ -44,7 +46,8 @@ export interface ServerStorage extends PasswordStore {
   getAlarm(): Promise<number | null>;
   setAlarm(scheduledTime: number): Promise<void>;
   deleteAlarm(): Promise<void>;
-  deleteAll(): Promise<void>;
+  list(): Promise<Map<string, unknown>>;
+  delete(keys: string[]): Promise<number>;
 }
 
 export interface ServerDeps {
@@ -147,12 +150,14 @@ export class OpencodeServer {
     await this.scheduleIdleCheck();
   }
 
-  // The deleted mark is written before teardown and again after deleteAll, so no start queued
-  // behind this one, and none after the Durable Object restarts, can bring the container back.
+  // The deleted mark is written before teardown and never removed, so no start queued behind
+  // this one, and none after the Durable Object restarts mid-cleanup, can bring the container
+  // back.
   private async destroyNow(): Promise<undefined> {
-    const deletedAt = `${Date.now()}`;
     this.deleted = true;
-    await this.storage.put(DELETED_KEY, deletedAt);
+    if ((await this.storage.get(DELETED_KEY)) === undefined) {
+      await this.storage.put(DELETED_KEY, `${Date.now()}`);
+    }
     this.ready = false;
     if (this.container.running) {
       this.destroying = true;
@@ -160,11 +165,17 @@ export class OpencodeServer {
     }
     await this.backups.deleteLatest();
     await this.storage.deleteAlarm();
-    await this.storage.deleteAll();
-    await this.storage.put(DELETED_KEY, deletedAt);
+    await this.deleteAllButDeletedMark();
     this.password = null;
     log.info("sandbox_destroyed", {});
     return undefined;
+  }
+
+  private async deleteAllButDeletedMark(): Promise<void> {
+    const keys = [...(await this.storage.list()).keys()].filter((key) => key !== DELETED_KEY);
+    for (let start = 0; start < keys.length; start += DELETE_BATCH) {
+      await this.storage.delete(keys.slice(start, start + DELETE_BATCH));
+    }
   }
 
   private async isDeleted(): Promise<boolean> {
