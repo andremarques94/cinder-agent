@@ -18,7 +18,7 @@ inputs:
     {
       description: OpenCode Console OAuth client ID,
       required: false,
-      default: "sk_69f19d27-026f-4801-a5e6-ab7266bb6e44",
+      default: "sk_12cbb559-99d5-483f-ac0a-5ea9dcf80f9a",
     }
   pr-number: { description: Pull request number, required: true }
   prompt: { description: Prompt template name, required: true }
