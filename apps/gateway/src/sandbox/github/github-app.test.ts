@@ -1,14 +1,10 @@
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { describe, expect, test, vi } from "vite-plus/test";
 
 import { ErrorCode, GatewayError } from "@/lib/errors";
 
 import { githubApp } from "./github-app.ts";
 
 const privateKey = await generatePkcs8Key();
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 function stubGithub(routes: Record<string, () => Response>) {
   const calls: string[] = [];
@@ -27,37 +23,47 @@ const tokenResponse = () =>
     { status: 201 },
   );
 
-test("installation tokens are minted with the app JWT and cached", async () => {
-  const calls = stubGithub({ "POST /app/installations/34/access_tokens": tokenResponse });
-  const app = githubApp({ appId: 1, privateKey });
+describe("given a GitHub App that GitHub accepts", () => {
+  test("when a token is asked for twice, then it is minted once with the app JWT", async () => {
+    const calls = stubGithub({ "POST /app/installations/34/access_tokens": tokenResponse });
+    const app = githubApp({ appId: 1, privateKey });
 
-  expect(await app.installationToken(34)).toBe("ghs_real");
-  expect(await app.installationToken(34)).toBe("ghs_real");
-  expect(calls).toEqual(["POST /app/installations/34/access_tokens bearer"]);
+    const first = await app.installationToken(34);
+    const second = await app.installationToken(34);
+
+    expect([first, second]).toEqual(["ghs_real", "ghs_real"]);
+    expect(calls).toEqual(["POST /app/installations/34/access_tokens bearer"]);
+  });
+
+  test("when the bot identity is asked for, then it comes from the app slug and bot user", async () => {
+    stubGithub({
+      "POST /app/installations/34/access_tokens": tokenResponse,
+      "GET /app": () => Response.json({ slug: "cinder" }),
+      "GET /users/cinder%5Bbot%5D": () => Response.json({ id: 99 }),
+    });
+    const app = githubApp({ appId: 2, privateKey });
+
+    const identity = await app.botIdentity(34);
+
+    expect(identity).toEqual({
+      name: "cinder[bot]",
+      email: "99+cinder[bot]@users.noreply.github.com",
+    });
+  });
 });
 
-test("the bot identity comes from the app slug and its bot user", async () => {
-  stubGithub({
-    "POST /app/installations/34/access_tokens": tokenResponse,
-    "GET /app": () => Response.json({ slug: "cinder" }),
-    "GET /users/cinder%5Bbot%5D": () => Response.json({ id: 99 }),
+describe("given a GitHub App that GitHub refuses", () => {
+  test("when a token or the bot identity is asked for, then it is a github_unavailable error", async () => {
+    stubGithub({});
+    const app = githubApp({ appId: 3, privateKey });
+
+    const results = await Promise.allSettled([app.installationToken(34), app.botIdentity(34)]);
+
+    for (const result of results) {
+      expect(result).toEqual({ status: "rejected", reason: expect.any(GatewayError) });
+      expect(result).toHaveProperty("reason.code", ErrorCode.GithubUnavailable);
+    }
   });
-  const app = githubApp({ appId: 2, privateKey });
-
-  expect(await app.botIdentity(34)).toEqual({
-    name: "cinder[bot]",
-    email: "99+cinder[bot]@users.noreply.github.com",
-  });
-});
-
-test("GitHub refusing the credentials is a github_unavailable error", async () => {
-  stubGithub({});
-  const app = githubApp({ appId: 3, privateKey });
-
-  const error = await app.installationToken(34).catch((caught: unknown) => caught);
-  expect(error).toBeInstanceOf(GatewayError);
-  expect(error).toHaveProperty("code", ErrorCode.GithubUnavailable);
-  await expect(app.botIdentity(34)).rejects.toHaveProperty("code", ErrorCode.GithubUnavailable);
 });
 
 async function generatePkcs8Key(): Promise<string> {

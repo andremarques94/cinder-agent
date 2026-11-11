@@ -21,16 +21,18 @@ export function migratedDatabase(): Database {
   const query = (sql: string, params: unknown[], method: Method) => {
     const statement = sqlite.prepare(sql);
     const values = params.map(toSqlValue);
-    if (method === "run") {
-      statement.run(...values);
-      return { rows: [] };
+    switch (method) {
+      case "run":
+        statement.run(...values);
+        return { rows: [] };
+      case "get":
+        throw new Error(
+          "use .limit(1).all() instead of .get(): the proxy can't return a missing row",
+        );
+      case "all":
+      case "values":
+        return { rows: statement.all(...values).map((row) => Object.values(row)) };
     }
-    if (method === "get") {
-      throw new Error(
-        "use .limit(1).all() instead of .get(): the proxy can't return a missing row",
-      );
-    }
-    return { rows: statement.all(...values).map((row) => Object.values(row)) };
   };
 
   return drizzle(

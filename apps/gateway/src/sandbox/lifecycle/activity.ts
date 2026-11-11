@@ -28,13 +28,20 @@ export class Activity {
       this.touch();
       return response;
     }
-    const release = this.hold();
     const { readable, writable } = new TransformStream();
-    void response.body
-      .pipeTo(writable)
-      .catch(() => {})
-      .finally(release);
+    void this.pipeWhileHeld(response.body, writable);
     return new Response(readable, response);
+  }
+
+  private async pipeWhileHeld(body: ReadableStream, writable: WritableStream): Promise<void> {
+    const release = this.hold();
+    try {
+      await body.pipeTo(writable);
+    } catch {
+      return;
+    } finally {
+      release();
+    }
   }
 
   isIdle(limitMs: number): boolean {

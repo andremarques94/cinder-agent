@@ -1,17 +1,18 @@
 import * as v from "valibot";
-import { expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vite-plus/test";
 
 import { PairingCodeSchema, ServerInfoSchema } from "./opencode-responses.ts";
 
-test("a pairing code from OpenCode becomes our camelCase shape", () => {
-  expect(v.parse(PairingCodeSchema, { code: "abc_123-XYZ", expires_in: 300 })).toEqual({
-    code: "abc_123-XYZ",
-    expiresIn: 300,
-  });
-});
+describe("given a pairing response from OpenCode", () => {
+  test("when it is well formed, then it becomes our camelCase shape", () => {
+    const response = { code: "abc_123-XYZ", expires_in: 300 };
 
-test("malformed pairing responses are rejected", () => {
-  for (const bad of [
+    const parsed = v.parse(PairingCodeSchema, response);
+
+    expect(parsed).toEqual({ code: "abc_123-XYZ", expiresIn: 300 });
+  });
+
+  test.each([
     {},
     { code: "", expires_in: 300 },
     { code: "abc", expires_in: 0 },
@@ -19,13 +20,21 @@ test("malformed pairing responses are rejected", () => {
     { code: 123, expires_in: 300 },
     "not an object",
     null,
-  ]) {
-    expect(v.is(PairingCodeSchema, bad)).toBe(false);
-  }
+  ])("when it is %j, then it is rejected", (response) => {
+    const valid = v.is(PairingCodeSchema, response);
+
+    expect(valid).toBe(false);
+  });
 });
 
-test("server info needs a non-empty version", () => {
-  expect(v.is(ServerInfoSchema, { version: "2.2.7", pid: 1 })).toBe(true);
-  expect(v.is(ServerInfoSchema, { version: "" })).toBe(false);
-  expect(v.is(ServerInfoSchema, { pid: 1 })).toBe(false);
+describe("given a server info response", () => {
+  test.each([
+    [{ version: "2.2.7", pid: 1 }, true],
+    [{ version: "" }, false],
+    [{ pid: 1 }, false],
+  ])("when it is %j, then valid is %s", (response, expected) => {
+    const valid = v.is(ServerInfoSchema, response);
+
+    expect(valid).toBe(expected);
+  });
 });

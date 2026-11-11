@@ -1,1 +1,8 @@
-export { loadConfig, type Config, type GithubConfig, type GithubSignInConfig } from "./config.ts";
+export {
+  APP_NAME,
+  IdSchema,
+  loadConfig,
+  type Config,
+  type GithubConfig,
+  type GithubSignInConfig,
+} from "./config.ts";

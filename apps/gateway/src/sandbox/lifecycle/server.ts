@@ -58,21 +58,12 @@ export class OpencodeServer {
   }
 
   async ensureReady(): Promise<RunningServer> {
-    await this.stopping?.catch(() => {});
+    await settled(this.stopping);
     const container = this.container();
     if (container.running && this.ready) {
       return this.connect(container);
     }
-    // https://developers.cloudflare.com/containers/guides/migrate-to-durable-object-container-api/
-    this.starting ??= this.start(container)
-      .catch((cause: unknown) => {
-        throw cause instanceof GatewayError
-          ? cause
-          : new GatewayError(ErrorCode.SandboxStartFailed, { cause });
-      })
-      .finally(() => {
-        this.starting = null;
-      });
+    this.starting ??= this.startOnce(container);
     return this.starting;
   }
 
@@ -81,8 +72,7 @@ export class OpencodeServer {
   }
 
   async status(): Promise<ServerStatus> {
-    const latest = await this.backups.latest().catch(() => null);
-    const lastSavedAt = latest ? new Date(latest.savedAt).toISOString() : null;
+    const lastSavedAt = await this.lastSavedAt();
     const container = this.ctx.container;
     if (!container?.running) {
       return { running: false, ready: false, version: null, lastSavedAt };
@@ -96,8 +86,8 @@ export class OpencodeServer {
   }
 
   async destroy(): Promise<void> {
-    await this.starting?.catch(() => {});
-    await this.stopping?.catch(() => {});
+    await settled(this.starting);
+    await settled(this.stopping);
     const container = this.ctx.container;
     this.ready = false;
     if (container?.running) {
@@ -132,6 +122,19 @@ export class OpencodeServer {
     await this.scheduleIdleCheck();
   }
 
+  // https://developers.cloudflare.com/containers/guides/migrate-to-durable-object-container-api/
+  private async startOnce(container: Container): Promise<RunningServer> {
+    try {
+      return await this.start(container);
+    } catch (cause) {
+      throw cause instanceof GatewayError
+        ? cause
+        : new GatewayError(ErrorCode.SandboxStartFailed, { cause });
+    } finally {
+      this.starting = null;
+    }
+  }
+
   private async start(container: Container): Promise<RunningServer> {
     if (!container.running) {
       this.ready = false;
@@ -149,9 +152,11 @@ export class OpencodeServer {
     }
 
     if (!(await this.succeeds(container, Command.isReady))) {
-      await this.backups.restoreLatest().catch((cause: unknown) => {
+      try {
+        await this.backups.restoreLatest();
+      } catch (cause) {
         throw new GatewayError(ErrorCode.SandboxRestoreFailed, { cause });
-      });
+      }
       await this.run(container, Command.markReady);
     }
     await this.scheduleIdleCheck();
@@ -187,13 +192,12 @@ export class OpencodeServer {
     if (installationId === null) {
       return { identity: null };
     }
-    const identity = await githubApp(github)
-      .botIdentity(installationId)
-      .catch((error: unknown) => {
-        log.warn("github_identity_failed", describeError(error));
-        return null;
-      });
-    return { identity };
+    try {
+      return { identity: await githubApp(github).botIdentity(installationId) };
+    } catch (error) {
+      log.warn("github_identity_failed", describeError(error));
+      return { identity: null };
+    }
   }
 
   // https://developers.cloudflare.com/containers/api/durable-object-container/
@@ -208,10 +212,16 @@ export class OpencodeServer {
   }
 
   private saveAndStop(reason: string): Promise<void> {
-    this.stopping ??= this.saveThenDestroy(reason).finally(() => {
-      this.stopping = null;
-    });
+    this.stopping ??= this.stopOnce(reason);
     return this.stopping;
+  }
+
+  private async stopOnce(reason: string): Promise<void> {
+    try {
+      await this.saveThenDestroy(reason);
+    } finally {
+      this.stopping = null;
+    }
   }
 
   private async saveThenDestroy(reason: string): Promise<void> {
@@ -269,16 +279,28 @@ export class OpencodeServer {
   }
 
   private watch(container: Container): void {
-    container
-      .monitor()
-      .catch((error: unknown) => {
-        if (!this.destroying) {
-          log.warn("sandbox_exited", describeError(error));
-        }
-      })
-      .finally(() => {
-        this.ready = false;
-      });
+    void this.watchUntilExit(container);
+  }
+
+  private async watchUntilExit(container: Container): Promise<void> {
+    try {
+      await container.monitor();
+    } catch (error) {
+      if (!this.destroying) {
+        log.warn("sandbox_exited", describeError(error));
+      }
+    } finally {
+      this.ready = false;
+    }
+  }
+
+  private async lastSavedAt(): Promise<string | null> {
+    try {
+      const latest = await this.backups.latest();
+      return latest ? new Date(latest.savedAt).toISOString() : null;
+    } catch {
+      return null;
+    }
   }
 
   private async loadPassword(): Promise<string> {
@@ -296,9 +318,19 @@ export class OpencodeServer {
 }
 
 async function fetchInfo({ client }: RunningServer): Promise<ServerInfo | null> {
-  const info = await client.server
-    .info({ signal: AbortSignal.timeout(INFO_TIMEOUT_MS) })
-    .catch(() => null);
-  const parsed = v.safeParse(ServerInfoSchema, info);
-  return parsed.success ? parsed.output : null;
+  try {
+    const info = await client.server.info({ signal: AbortSignal.timeout(INFO_TIMEOUT_MS) });
+    const parsed = v.safeParse(ServerInfoSchema, info);
+    return parsed.success ? parsed.output : null;
+  } catch {
+    return null;
+  }
+}
+
+async function settled(promise: Promise<unknown> | null): Promise<void> {
+  try {
+    await promise;
+  } catch {
+    return;
+  }
 }

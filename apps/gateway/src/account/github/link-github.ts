@@ -7,6 +7,8 @@ export interface LinkedInstallation {
   login: string;
 }
 
+type Outcome = "linked" | "notOwned" | "takenByOthers";
+
 export interface LinkResult {
   login: string;
   linked: LinkedInstallation[];
@@ -31,19 +33,31 @@ export async function linkGithub(
     takenByOthers: [],
   };
   for (const installation of await github.installations(token)) {
-    const login = installation.account?.login ?? `#${installation.id}`;
-    const entry = { installationId: installation.id, login };
-    if (!(await owns(github, token, githubUser, installation))) {
-      result.notOwned.push(entry);
-    } else if (
-      await users.claimInstallation(userId, installation.id, installation.account?.login ?? null)
-    ) {
-      result.linked.push(entry);
-    } else {
-      result.takenByOthers.push(entry);
-    }
+    const outcome = await linkInstallation(github, users, userId, token, githubUser, installation);
+    result[outcome].push({
+      installationId: installation.id,
+      login: installation.account?.login ?? `#${installation.id}`,
+    });
   }
   return result;
+}
+
+async function linkInstallation(
+  github: GithubSignIn,
+  users: UserStore,
+  userId: string,
+  token: string,
+  githubUser: GithubUser,
+  installation: GithubInstallation,
+): Promise<Outcome> {
+  if (!(await owns(github, token, githubUser, installation))) {
+    return "notOwned";
+  }
+  const accountLogin = installation.account?.login ?? null;
+  if (!(await users.claimInstallation(userId, installation.id, accountLogin))) {
+    return "takenByOthers";
+  }
+  return "linked";
 }
 
 async function owns(
@@ -52,11 +66,15 @@ async function owns(
   user: GithubUser,
   { account }: GithubInstallation,
 ): Promise<boolean> {
-  if (account?.type === "User") {
-    return account.id === user.id;
+  if (!account) {
+    return false;
   }
-  if (account?.type === "Organization") {
-    return github.isOrgAdmin(token, account.login);
+  switch (account.type) {
+    case "User":
+      return account.id === user.id;
+    case "Organization":
+      return github.isOrgAdmin(token, account.login);
+    case "Other":
+      return false;
   }
-  return false;
 }

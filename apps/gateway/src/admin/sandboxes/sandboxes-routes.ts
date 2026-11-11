@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 
 import { ErrorCode, GatewayError } from "@/lib/errors";
-import { HttpStatus } from "@/lib/http";
+import { CACHE_CONTROL, HttpStatus, NO_STORE } from "@/lib/http";
 import { callSandbox, pairingLink } from "@/sandbox";
 import type { User } from "@/users";
 
@@ -16,7 +16,7 @@ export const sandboxesRoutes = new Hono<AdminEnv>()
       c.var.config.sandboxDomain,
       new URL(c.req.url),
     );
-    c.header("cache-control", "no-store");
+    c.header(CACHE_CONTROL, NO_STORE);
     return c.json(link);
   })
 

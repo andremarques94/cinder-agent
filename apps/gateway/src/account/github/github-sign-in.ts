@@ -2,10 +2,9 @@ import * as v from "valibot";
 
 import type { GithubSignInConfig } from "@/lib/config";
 import { ErrorCode, GatewayError } from "@/lib/errors";
+import { GITHUB_API_URL, GITHUB_URL, githubApiHeaders } from "@/lib/github";
 import { HttpStatus } from "@/lib/http";
 
-const GITHUB = "https://github.com";
-const API = "https://api.github.com";
 const PAGE_SIZE = 100;
 const MAX_PAGES = 10;
 
@@ -18,7 +17,7 @@ const UserSchema = v.object({ id: Id, login: v.pipe(v.string(), v.nonEmpty()) })
 const AccountSchema = v.object({
   id: Id,
   login: v.pipe(v.string(), v.nonEmpty()),
-  type: v.string(),
+  type: v.fallback(v.picklist(["User", "Organization", "Other"]), "Other"),
 });
 
 const InstallationsSchema = v.object({
@@ -28,17 +27,14 @@ const InstallationsSchema = v.object({
   ),
 });
 
-const MembershipSchema = v.object({ state: v.string(), role: v.string() });
+const AdminMembershipSchema = v.object({ state: v.literal("active"), role: v.literal("admin") });
 
 export interface GithubUser {
   id: number;
   login: string;
 }
 
-export interface GithubInstallation {
-  id: number;
-  account: { id: number; login: string; type: string } | null;
-}
+export type GithubInstallation = v.InferOutput<typeof InstallationsSchema>["installations"][number];
 
 export interface GithubSignIn {
   installUrl(): string;
@@ -54,14 +50,7 @@ export interface GithubSignIn {
 // https://docs.github.com/en/rest/orgs/members#get-an-organization-membership-for-the-authenticated-user
 export function githubSignIn(config: GithubSignInConfig, fetcher: typeof fetch): GithubSignIn {
   const api = async (path: string, token: string): Promise<Response> =>
-    fetcher(`${API}${path}`, {
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${token}`,
-        "user-agent": "cinder-agent",
-        "x-github-api-version": "2022-11-28",
-      },
-    });
+    fetcher(`${GITHUB_API_URL}${path}`, { headers: githubApiHeaders(token) });
 
   const apiJson = async <T extends v.GenericSchema>(path: string, token: string, schema: T) => {
     const response = await api(path, token);
@@ -72,10 +61,10 @@ export function githubSignIn(config: GithubSignInConfig, fetcher: typeof fetch):
   };
 
   return {
-    installUrl: () => `${GITHUB}/apps/${encodeURIComponent(config.slug)}/installations/new`,
+    installUrl: () => `${GITHUB_URL}/apps/${encodeURIComponent(config.slug)}/installations/new`,
 
     authorizeUrl({ state, challenge, redirectUri }) {
-      const url = new URL(`${GITHUB}/login/oauth/authorize`);
+      const url = new URL(`${GITHUB_URL}/login/oauth/authorize`);
       url.search = new URLSearchParams({
         client_id: config.clientId,
         redirect_uri: redirectUri,
@@ -87,7 +76,7 @@ export function githubSignIn(config: GithubSignInConfig, fetcher: typeof fetch):
     },
 
     async exchangeCode({ code, verifier, redirectUri }) {
-      const response = await fetcher(`${GITHUB}/login/oauth/access_token`, {
+      const response = await fetcher(`${GITHUB_URL}/login/oauth/access_token`, {
         method: "POST",
         headers: { accept: "application/json", "content-type": "application/json" },
         body: JSON.stringify({
@@ -131,8 +120,7 @@ export function githubSignIn(config: GithubSignInConfig, fetcher: typeof fetch):
       if (!response.ok) {
         throw failed(`GET ${path} returned ${response.status}`);
       }
-      const membership = parse(MembershipSchema, await response.json());
-      return membership.state === "active" && membership.role === "admin";
+      return v.is(AdminMembershipSchema, await response.json());
     },
   };
 }

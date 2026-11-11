@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { csrf } from "hono/csrf";
 
 import { ErrorCode, GatewayError } from "@/lib/errors";
+import { CACHE_CONTROL, NO_STORE } from "@/lib/http";
 
 import { accessEmail } from "./access/access-identity.ts";
 import type { AccountEnv } from "./account-env.ts";
@@ -22,7 +23,7 @@ export const accountRoutes = new Hono<AccountEnv>()
     }
     c.set("user", user);
     await c.var.users.recordLogin(user.id);
-    c.header("cache-control", "no-store");
+    c.header(CACHE_CONTROL, NO_STORE);
     await next();
   })
   .use(csrf())

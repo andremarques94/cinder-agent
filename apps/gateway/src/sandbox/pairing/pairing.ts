@@ -9,10 +9,12 @@ interface PairingLink {
   expiresIn: number;
 }
 
-export function callSandbox<T>(sandbox: string, call: () => Promise<T>): Promise<T> {
-  return call().catch((cause: unknown) => {
+export async function callSandbox<T>(sandbox: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (cause) {
     throw new GatewayError(ErrorCode.SandboxUnavailable, { cause, details: { sandbox } });
-  });
+  }
 }
 
 export async function pairingLink(

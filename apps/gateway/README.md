@@ -33,7 +33,7 @@ src/
   testing/                Test-only: Drizzle on node:sqlite with the real migrations
 ```
 
-Rules:
+Rules, on top of the [code style](../../CONTRIBUTING.md#code-style):
 
 - Import another top-level folder through its `index.ts` with `@/name` (`@/lib/name` for `lib/`).
   Inside a top-level folder, import files directly with relative paths; subfolders have no
@@ -41,13 +41,10 @@ Rules:
 - Only `index.ts` and `sandbox/worker.ts` (and the files it imports) use the Workers runtime.
   `@/sandbox` stays runtime-free, so everything else is tested with `vp test`.
 - Group code by the route or domain it serves; add a subfolder when a part grows its own files.
-- No type casts (`as`, `!`), braces on every `if`, sorted imports. `vp check` enforces these.
-- Validate outside data with valibot.
 - Query D1 with Drizzle; change the schema in `src/users/schema.ts`, then run
   `vp run gateway#db:generate --name <change>` and commit the generated migration. Use
   `.limit(1).all()` instead of `.get()`; the test database can't return a missing row from `.get()`.
 - A sandbox's Durable Object is named by its user's ID, never the sandbox name or anything else
   from the request. Only the hostname (sandbox hosts) or the Access identity (app host) picks it.
 - Throw `GatewayError(ErrorCode.X)`, log with `log`, use `HttpStatus` and `WebSocketClose`.
-- Comments only for TODOs and links to the docs code was taken from.
 - OpenCode is pinned in `sandbox/Dockerfile` and `pnpm-workspace.yaml`; update both together.

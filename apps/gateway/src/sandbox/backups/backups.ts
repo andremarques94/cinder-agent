@@ -55,9 +55,11 @@ export class WorkspaceBackups {
     const saved = { savedAt: this.now(), record };
     await this.records.put(SAVED_BACKUP_KEY, saved);
     if (previous) {
-      await this.store.delete(previous.record).catch((error: unknown) => {
+      try {
+        await this.store.delete(previous.record);
+      } catch (error) {
         log.warn("backup_delete_failed", { id: previous.record.id, ...describeError(error) });
-      });
+      }
     }
     return saved;
   }

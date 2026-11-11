@@ -1,12 +1,17 @@
-import { expect, test } from "vite-plus/test";
+import { describe, expect, test } from "vite-plus/test";
 
 import { sandboxOrigin } from "./hostnames.ts";
 
-test("sandboxOrigin keeps the admin request's scheme and port", () => {
-  expect(sandboxOrigin("me", "example.com", new URL("https://gw.acct.workers.dev/x"))).toBe(
-    "https://me.example.com",
-  );
-  expect(sandboxOrigin("me", "localhost", new URL("http://localhost:8787/x"))).toBe(
-    "http://me.localhost:8787",
+describe("given a request to the gateway", () => {
+  test.each([
+    ["example.com", "https://gw.acct.workers.dev/x", "https://me.example.com"],
+    ["localhost", "http://localhost:8787/x", "http://me.localhost:8787"],
+  ])(
+    "when the sandbox origin under %s is built from %s, then it keeps the scheme and port",
+    (domain, request, origin) => {
+      const built = sandboxOrigin("me", domain, new URL(request));
+
+      expect(built).toBe(origin);
+    },
   );
 });

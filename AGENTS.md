@@ -38,7 +38,8 @@ commits, pull requests).
 - Don't read, print or commit `.dev.vars`, `*.secrets.env` or private keys.
 - Don't commit, push or open pull requests unless asked. No AI attribution in commits or PRs.
 - Work on a branch from `master` named `<type>/<short-description>`.
-- Comments only for TODOs and links to the docs the code was taken from.
+- Follow the code style in [CONTRIBUTING.md](CONTRIBUTING.md#code-style), including
+  Given/When/Then tests. Comments only for TODOs and links to the docs the code was taken from.
 
 ## Gotchas
 
