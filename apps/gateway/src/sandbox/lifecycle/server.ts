@@ -235,13 +235,23 @@ export class OpencodeServer {
     }
     const restored = this.ready || (await this.succeeds(Command.isReady));
     if (restored) {
-      await this.succeeds(Command.pauseOpencode);
+      // Without a pause the archive could hold half-written files, so a failed pause keeps the
+      // container running and the previous backup as the restore point.
+      if (!(await this.succeeds(Command.pauseOpencode))) {
+        await this.resumeOpencode(reason);
+        throw new GatewayError(ErrorCode.SandboxSaveFailed, {
+          details: { reason, step: "pause" },
+        });
+      }
       try {
         const saved = await this.backups.save();
         log.info("sandbox_saved", { reason, bytes: saved.record.size });
       } catch (cause) {
-        await this.succeeds(Command.resumeOpencode);
-        throw new GatewayError(ErrorCode.SandboxSaveFailed, { cause, details: { reason } });
+        await this.resumeOpencode(reason);
+        throw new GatewayError(ErrorCode.SandboxSaveFailed, {
+          cause,
+          details: { reason, step: "save" },
+        });
       }
     }
     this.ready = false;
@@ -249,6 +259,13 @@ export class OpencodeServer {
     this.destroying = true;
     await container.destroy();
     return undefined;
+  }
+
+  private async resumeOpencode(reason: string): Promise<void> {
+    if (!(await this.succeeds(Command.resumeOpencode))) {
+      this.ready = false;
+      log.error("sandbox_resume_failed", { reason });
+    }
   }
 
   private async scheduleIdleCheck(): Promise<void> {

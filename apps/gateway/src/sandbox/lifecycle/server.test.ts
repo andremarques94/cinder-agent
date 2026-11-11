@@ -41,6 +41,8 @@ class FakeContainer implements SandboxContainer {
   running = false;
   readonly images = { opencode: "opencode" };
   starts = 0;
+  healthChecks = 0;
+  readonly exitCodes = { pause: 0, resume: 0 };
   private marker = false;
   private exited = Promise.withResolvers<void>();
 
@@ -70,6 +72,7 @@ class FakeContainer implements SandboxContainer {
   getTcpPort(): ServerPort {
     return {
       fetch: async () => {
+        this.healthChecks++;
         await (this.gates.health ?? OPEN_GATE).pass();
         return Response.json({ version: "2.2.7" });
       },
@@ -90,8 +93,11 @@ class FakeContainer implements SandboxContainer {
         this.marker = true;
         return 0;
       case Command.pauseOpencode.join(" "):
-        this.events.push("paused");
-        return 0;
+        this.events.push(this.exitCodes.pause === 0 ? "paused" : "pause failed");
+        return this.exitCodes.pause;
+      case Command.resumeOpencode.join(" "):
+        this.events.push(this.exitCodes.resume === 0 ? "resumed" : "resume failed");
+        return this.exitCodes.resume;
       default:
         return 0;
     }
@@ -291,5 +297,70 @@ describe("given a sandbox that is starting", () => {
 
     expect(container.running).toBe(false);
     expect(events.slice(-2)).toEqual(["container destroyed", "backups deleted"]);
+  });
+});
+
+describe("given a running sandbox that can't be paused", () => {
+  test("when it is stopped, then the stop fails, nothing is saved and the container keeps running", async () => {
+    const { server, container, events } = setup();
+    await server.ensureReady();
+    container.exitCodes.pause = 1;
+    events.length = 0;
+
+    const stop = server.stop();
+
+    await expect(stop).rejects.toMatchObject({
+      code: ErrorCode.SandboxSaveFailed,
+      details: { step: "pause" },
+    });
+    expect(events).toEqual(["pause failed", "resumed"]);
+    expect(container.running).toBe(true);
+  });
+
+  test("when it is idle, then the idle check keeps it running and checks again later", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { server, container, events } = setup({ idle: true });
+    await server.ensureReady();
+    container.exitCodes.pause = 1;
+
+    await server.checkIdle();
+
+    expect(container.running).toBe(true);
+    expect(events).not.toContain("saved");
+  });
+
+  test("when resuming fails too, then it is logged and the next request checks its health", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { server, container } = setup();
+    await server.ensureReady();
+    container.exitCodes.pause = 1;
+    container.exitCodes.resume = 1;
+    const health = vi.spyOn(container, "getTcpPort");
+
+    await expect(server.stop()).rejects.toMatchObject({ code: ErrorCode.SandboxSaveFailed });
+    await server.ensureReady();
+
+    expect(errors).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "sandbox_resume_failed" }),
+    );
+    expect(health).toHaveBeenCalled();
+  });
+});
+
+describe("given a running sandbox whose backup fails", () => {
+  test("when it is stopped, then OpenCode is resumed and the container keeps running", async () => {
+    const { server, container, backups, events } = setup();
+    await server.ensureReady();
+    vi.spyOn(backups, "save").mockRejectedValueOnce(new Error("R2 unavailable"));
+    events.length = 0;
+
+    const stop = server.stop();
+
+    await expect(stop).rejects.toMatchObject({
+      code: ErrorCode.SandboxSaveFailed,
+      details: { step: "save" },
+    });
+    expect(events).toEqual(["paused", "resumed"]);
+    expect(container.running).toBe(true);
   });
 });
