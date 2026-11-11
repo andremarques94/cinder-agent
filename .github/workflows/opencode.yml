@@ -28,6 +28,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+      id-token: write
       issues: write
       pull-requests: write
     steps:
@@ -39,7 +40,6 @@ jobs:
       - name: Run OpenCode
         uses: ./.github/actions/opencode-v2 # zizmor: ignore[self-repository] trusted commit checked out above
         with:
-          api-key: ${{ secrets.OPENCODE_API_KEY }}
           commit-message: "fix: apply OpenCode changes"
           github-token: ${{ github.token }}
           pr-number: ${{ github.event.issue.number || github.event.pull_request.number }}
@@ -58,6 +58,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+      id-token: write
       issues: write
       pull-requests: write
     outputs:
@@ -73,7 +74,6 @@ jobs:
         id: review
         uses: ./.github/actions/opencode-v2 # zizmor: ignore[self-repository] trusted commit checked out above
         with:
-          api-key: ${{ secrets.OPENCODE_API_KEY }}
           commit-message: "build(deps): apply OpenCode compatibility fixes"
           expected-author: dependabot[bot]
           github-token: ${{ github.token }}

@@ -2,12 +2,24 @@ name: Run OpenCode V2 on a pull request
 description: Validate a PR, run restricted OpenCode V2, commit repairs, and post its report
 
 inputs:
-  api-key: { description: OpenCode provider API key, required: true }
   commit-message: { description: Commit message used when OpenCode edits files, required: true }
   expected-author: { description: Required PR author, required: false, default: "" }
   github-token: { description: GitHub token used outside OpenCode, required: true }
   head-ref-prefix: { description: Required PR branch prefix, required: false, default: "" }
-  model: { description: OpenCode model ID, required: false, default: opencode-go/kimi-k3 }
+  model:
+    { description: OpenCode model ID, required: false, default: opencode/deepseek-v4.1-flash-free }
+  oidc-audience:
+    {
+      description: Audience requested from GitHub OIDC,
+      required: false,
+      default: "https://opencode.ai/console",
+    }
+  oidc-client-id:
+    {
+      description: OpenCode Console OAuth client ID,
+      required: false,
+      default: "sk_69f19d27-026f-4801-a5e6-ab7266bb6e44",
+    }
   pr-number: { description: Pull request number, required: true }
   prompt: { description: Prompt template name, required: true }
   request: { description: Trusted request appended to the prompt, required: false, default: "" }
@@ -78,6 +90,23 @@ runs:
         tar -xzf "${archive}" -C "${install_dir}"
         "${install_dir}/opencode" --version
 
+    - name: Sign in to OpenCode Console with GitHub OIDC
+      id: auth
+      shell: bash
+      env:
+        AUDIENCE: ${{ inputs.oidc-audience }}
+        CLIENT_ID: ${{ inputs.oidc-client-id }}
+      run: |
+        oidc="$(curl -sSf --oauth2-bearer "${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" | jq -er '.value')"
+        token="$(curl -sSf https://opencode.ai/console/auth/oauth/token \
+          --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+          --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:jwt' \
+          --data-urlencode "client_id=${CLIENT_ID}" \
+          --data-urlencode "subject_token=${oidc}" | jq -er '.access_token')"
+        echo "::add-mask::${token}"
+        echo "token=${token}" >> "${GITHUB_OUTPUT}"
+
     - name: Run restricted OpenCode V2
       shell: bash
       env:
@@ -86,7 +115,7 @@ runs:
         INPUT_PROMPT_NAME: ${{ inputs.prompt }}
         INPUT_REQUEST: ${{ inputs.request }}
         INPUT_WORKING_DIRECTORY: ${{ github.workspace }}/pr
-        OPENCODE_API_KEY: ${{ inputs.api-key }}
+        OPENCODE_API_KEY: ${{ steps.auth.outputs.token }}
         OPENCODE_BIN: ${{ runner.temp }}/opencode-cli/${{ inputs.version }}/opencode
         REPORT_FILE: ${{ runner.temp }}/opencode-report.md
       run: bash "${GITHUB_ACTION_PATH}/run.sh"
