@@ -14,6 +14,7 @@ COPY --from=docker.io/cloudflare/sandbox:1.0.3 /usr/local/bin/sandbox-shim /usr/
 
 COPY opencode.json /etc/opencode/opencode.json
 COPY --chmod=755 start.sh /usr/local/bin/cinder-start
+COPY --chmod=755 pause.sh /usr/local/bin/cinder-pause
 
 ENV HOME=/root \
   OPENCODE_DISABLE_AUTOUPDATE=1
