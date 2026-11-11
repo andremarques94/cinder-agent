@@ -54,7 +54,7 @@ export interface ServerDeps {
   container: SandboxContainer;
   storage: ServerStorage;
   config: ServerConfig;
-  backups: Pick<WorkspaceBackups, "latest" | "restoreLatest" | "save" | "deleteLatest">;
+  backups: Pick<WorkspaceBackups, "latest" | "restoreLatest" | "save" | "deleteAll">;
   activity: Pick<Activity, "isIdle">;
   github: SandboxGithub | null;
   wait?: (ms: number) => Promise<void>;
@@ -163,7 +163,7 @@ export class OpencodeServer {
       this.destroying = true;
       await this.container.destroy();
     }
-    await this.backups.deleteLatest();
+    await this.backups.deleteAll();
     await this.storage.deleteAlarm();
     await this.deleteAllButDeletedMark();
     this.password = null;

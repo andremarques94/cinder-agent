@@ -26,12 +26,15 @@ export class OpencodeSandbox extends DurableObject<Env> {
     if (!ctx.container || !userId) {
       throw new GatewayError(ErrorCode.SandboxNotConfigured);
     }
+    const prefix = `${BACKUP_PREFIX}${userId}/`;
     const backups = new WorkspaceBackups(
       new DirectoryBackup(ctx.container, ctx.exports.DirectoryBackupGateway, {
         binding: BACKUP_BINDING,
-        prefix: `${BACKUP_PREFIX}${userId}/`,
+        prefix,
       }),
       ctx.storage,
+      env.BACKUPS,
+      prefix,
     );
     const users = d1UserStore(env.DB);
     const config = loadConfig(env);
