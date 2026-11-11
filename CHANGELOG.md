@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/andremarques94/cinder-agent/compare/v0.1.0...v0.1.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **ci:** read the OpenCode client ID from a repository variable ([#8](https://github.com/andremarques94/cinder-agent/issues/8)) ([4d0dbca](https://github.com/andremarques94/cinder-agent/commit/4d0dbca434ed3a0dc7242b463b49aaa4b40b7bb8))
+
 ## 0.1.0 (2026-11-11)
 
 
