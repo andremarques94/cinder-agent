@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0](https://github.com/andremarques94/cinder-agent/compare/v0.2.0...v0.3.0) (2026-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **gateway:** give each invited user their own sandbox ([#14](https://github.com/andremarques94/cinder-agent/issues/14))
+
+### Features
+
+* **gateway:** give each invited user their own sandbox ([#14](https://github.com/andremarques94/cinder-agent/issues/14)) ([a304f2e](https://github.com/andremarques94/cinder-agent/commit/a304f2e5d8c57fb798091c543d0e90ba4fd6133f))
+
 ## [0.2.0](https://github.com/andremarques94/cinder-agent/compare/v0.1.1...v0.2.0) (2026-11-11)
 
 
