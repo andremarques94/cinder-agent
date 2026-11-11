@@ -8,8 +8,9 @@ import { d1UserStore } from "@/users";
 
 import { WorkspaceBackups } from "../backups/backups.ts";
 import { PairingCodeSchema, type PairingCode } from "../container/opencode-responses.ts";
+import { sandboxGithub } from "../github/sandbox-github.ts";
 import { Activity } from "../lifecycle/activity.ts";
-import { OpencodeServer, type ServerStatus } from "../lifecycle/server.ts";
+import { OpencodeServer, type ServerPort, type ServerStatus } from "../lifecycle/server.ts";
 import { proxyToServer } from "../proxy/proxy.ts";
 
 const BACKUP_BINDING = "BACKUPS";
@@ -33,19 +34,27 @@ export class OpencodeSandbox extends DurableObject<Env> {
       ctx.storage,
     );
     const users = d1UserStore(env.DB);
-    this.server = new OpencodeServer(
-      ctx,
-      loadConfig(env),
+    const config = loadConfig(env);
+    const container = ctx.container;
+    this.server = new OpencodeServer({
+      container,
+      storage: ctx.storage,
+      config,
       backups,
-      this.activity,
-      userId,
-      async () => {
-        if (!(await users.byId(userId))) {
-          throw new GatewayError(ErrorCode.NotFound, { details: { reason: "user deleted" } });
-        }
-        return (await users.installations(userId))[0]?.installationId ?? null;
-      },
-    );
+      activity: this.activity,
+      github: sandboxGithub({
+        config: config.github,
+        container,
+        outbound: () => ctx.exports.GithubOutbound({ props: { userId } }),
+        identityInstallation: async () => {
+          if (!(await users.byId(userId))) {
+            throw new GatewayError(ErrorCode.NotFound, { details: { reason: "user deleted" } });
+          }
+          return (await users.installations(userId))[0]?.installationId ?? null;
+        },
+      }),
+    });
+    void ctx.blockConcurrencyWhile(() => this.server.resume());
   }
 
   override async fetch(request: Request): Promise<Response> {
@@ -80,7 +89,7 @@ export class OpencodeSandbox extends DurableObject<Env> {
     return this.server.destroy();
   }
 
-  private async proxy(port: Fetcher, request: Request): Promise<Response> {
+  private async proxy(port: ServerPort, request: Request): Promise<Response> {
     try {
       return await proxyToServer(port, request, this.activity);
     } catch (cause) {

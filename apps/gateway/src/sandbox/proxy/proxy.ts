@@ -1,8 +1,9 @@
 import type { Activity } from "../lifecycle/activity.ts";
+import type { ServerPort } from "../lifecycle/server.ts";
 import { bridgeWebSocket } from "./websocket-bridge.ts";
 
 export async function proxyToServer(
-  port: Fetcher,
+  port: ServerPort,
   request: Request,
   activity: Activity,
 ): Promise<Response> {
