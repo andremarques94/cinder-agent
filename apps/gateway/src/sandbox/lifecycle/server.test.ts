@@ -167,7 +167,7 @@ function setup({ gates = {}, idle = false, storage = memoryStorage() }: Setup = 
       events.push("saved");
       return SAVED;
     },
-    deleteLatest: async () => {
+    deleteAll: async () => {
       events.push("backups deleted");
     },
   };
