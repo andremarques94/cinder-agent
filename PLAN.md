@@ -125,6 +125,7 @@ Logins are done by OpenCode itself and stored **inside that user's sandbox**.
 
 ### 3.6 Persistence
 - Snapshot `/workspace` **and OpenCode's data directory** (sessions + provider credentials) to R2 on idle/stop; restore on start. **Encrypt** snapshots per user (key held by the Worker, not the container).
+- Implemented (M1) with `DirectoryBackup` from `@cloudflare/sandbox`: everything persistent lives under `/persist` and is backed up as one R2 object, restored before `opencode serve` starts. Encryption is R2's at-rest encryption; per-user keys need a custom pipeline (DirectoryBackup has no hook) and are deferred. Container snapshots were rejected: tied to the image version and expire after 30 days.
 - D1: users, GitHub identities, installations, projects, sandbox metadata. Durable Object: live state (awake/asleep, last activity, active sessions).
 
 ## 4. Security rules (non-negotiable)

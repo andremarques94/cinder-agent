@@ -7,8 +7,11 @@ Each sandbox is an `opencode serve` in its own [Cloudflare container](https://de
 behind a small Worker. It's reachable at `https://<name>.<your-domain>`, and you sign in with
 OpenCode's pairing links.
 
-**Work in progress.** Nothing is persisted yet: when a sandbox stops (after 30 minutes idle by
-default), its files, sessions and model logins are lost. See [PLAN.md](PLAN.md) for what's next.
+A sandbox stops after 30 minutes idle by default. Before it stops, its files, sessions and model
+logins are backed up to R2 and restored on the next start. Changes made since the last stop are
+lost if the container dies unexpectedly.
+
+**Work in progress.** See [PLAN.md](PLAN.md) for what's next.
 
 ## Requirements
 
@@ -32,7 +35,13 @@ default), its files, sessions and model logins are lost. See [PLAN.md](PLAN.md) 
 2. In [apps/gateway/wrangler.jsonc](apps/gateway/wrangler.jsonc), replace `example.com` (in
    `SANDBOX_DOMAIN` and `routes`) with your domain. `SANDBOXES` is the list of sandbox names.
 3. Add a DNS record in Cloudflare: `AAAA`, name `*`, content `100::`, proxied.
-4. Deploy with an admin token:
+4. Create the R2 bucket for backups:
+
+   ```bash
+   vp -C apps/gateway exec wrangler r2 bucket create cinder-agent-backups
+   ```
+
+5. Deploy with an admin token:
 
    ```bash
    echo "ADMIN_TOKEN=$(openssl rand -hex 32)" > apps/gateway/.secrets.env
@@ -42,7 +51,7 @@ default), its files, sessions and model logins are lost. See [PLAN.md](PLAN.md) 
    vp -C apps/gateway exec wrangler deploy --secrets-file .secrets.env
    ```
 
-5. Get a sign-in link (valid 5 minutes, works once) and open it in a browser or paste it into the
+6. Get a sign-in link (valid 5 minutes, works once) and open it in a browser or paste it into the
    OpenCode desktop app:
 
    ```bash

@@ -2,6 +2,7 @@ import { createApp } from "@/app";
 import { loadConfig } from "@/config";
 import { durableObjectDirectory } from "@/sandbox";
 
+export { DirectoryBackupGateway } from "@cloudflare/sandbox";
 export { OpencodeSandbox } from "@/sandbox";
 
 export default createApp((env) => ({

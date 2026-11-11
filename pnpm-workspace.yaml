@@ -5,6 +5,7 @@ packages:
 catalogMode: prefer
 
 catalog:
+  "@cloudflare/sandbox": 1.0.3
   "@commitlint/cli": 21.2.4
   "@commitlint/config-conventional": 21.2.4
   "@opencode/client": 2.2.7
