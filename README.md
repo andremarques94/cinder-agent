@@ -105,18 +105,21 @@ usage and budgets per user, admin in the dashboard, and scheduled jobs.
 
 5. Set up [sign-in](#sign-in) with Cloudflare Access and set `ACCESS_AUD` in `wrangler.jsonc`.
 
-6. Set up the [GitHub App](#github), which adds `GITHUB_APP_PRIVATE_KEY` to `.secrets.env`.
-   Then deploy with an admin token:
+6. Set the admin token. Generate one with `openssl rand -hex 32`, keep it in your password
+   manager, and paste it when asked. On the first secret, Wrangler offers to create the Worker;
+   say yes.
 
    ```bash
-   echo "ADMIN_TOKEN=$(openssl rand -hex 32)" >> apps/gateway/.secrets.env
+   vp -C apps/gateway exec wrangler secret put ADMIN_TOKEN
    ```
+
+7. Set up the [GitHub App](#github), which sets the other two secrets. Then deploy:
 
    ```bash
-   vp -C apps/gateway exec wrangler deploy --secrets-file .secrets.env
+   vp -C apps/gateway exec wrangler deploy
    ```
 
-7. Invite yourself (see [Users](#users)), open `https://app.<your-domain>`, sign in and press
+8. Invite yourself (see [Users](#users)), open `https://app.<your-domain>`, sign in and press
    **Pair a device**. Scan the QR code with the [OpenCode iOS app](https://opencode.ai/mobile), or
    paste the link into the OpenCode desktop app or a browser. It works once, within 5 minutes.
 
@@ -191,15 +194,18 @@ and on organizations they're an admin of.
    ```
 
 5. Set `GITHUB_APP_ID`, `GITHUB_APP_SLUG` (the App's URL name) and `GITHUB_CLIENT_ID` in
-   `wrangler.jsonc`. Generate a client secret, then add it and the key to `.secrets.env`:
+   `wrangler.jsonc`. Store the key as a Worker secret, then generate a client secret and paste it
+   when asked:
 
    ```bash
-   printf 'GITHUB_APP_PRIVATE_KEY="%s"\n' "$(awk '{printf "%s\\n", $0}' app.pkcs8.pem)" >> apps/gateway/.secrets.env
+   vp -C apps/gateway exec wrangler secret put GITHUB_APP_PRIVATE_KEY < app.pkcs8.pem
    ```
 
    ```bash
-   echo "GITHUB_CLIENT_SECRET=<client secret>" >> apps/gateway/.secrets.env
+   vp -C apps/gateway exec wrangler secret put GITHUB_CLIENT_SECRET
    ```
+
+   Keep the key in your password manager rather than on disk; GitHub can generate a new one.
 
 On the dashboard, **Install the GitHub App** installs it, then signs in to GitHub to prove who owns
 the installation; **Link installations you already have** only signs in. The gateway keeps no
