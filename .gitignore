@@ -24,8 +24,11 @@ Thumbs.db
 !.vscode/settings.json
 *.swp
 
-.claude/settings.local.json
-.claude/worktrees/
+# Local agent tooling (personal, not part of the project)
+.agents/
+.claude/
+.codex/
+.mcp.json
 
 # Local plans, reviews and explorations
 docs/
