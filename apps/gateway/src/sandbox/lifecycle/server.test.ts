@@ -91,8 +91,15 @@ class FakeContainer implements SandboxContainer {
     this.marker = true;
   }
 
+  readonly rejects = new Set<string>();
+
   async exec(command: string[]): Promise<{ exitCode: Promise<number> }> {
-    return { exitCode: Promise.resolve(this.run(command.join(" "))) };
+    const joined = command.join(" ");
+    if (this.rejects.has(joined)) {
+      this.events.push(`${command[1]} rejected`);
+      throw new Error("container connection lost");
+    }
+    return { exitCode: Promise.resolve(this.run(joined)) };
   }
 
   private run(command: string): number {
@@ -412,5 +419,46 @@ describe("given a Durable Object that restarts", () => {
     expect(container.monitors).toBe(0);
     expect(container.timeouts).toEqual([]);
     expect(events).toEqual([]);
+  });
+});
+
+describe("given a container whose exec calls are rejected", () => {
+  test("when the pause is rejected, then OpenCode is resumed and the stop fails at the pause step", async () => {
+    const { server, container, events } = setup();
+    await server.ensureReady();
+    container.rejects.add(Command.pauseOpencode.join(" "));
+    events.length = 0;
+
+    const stop = server.stop();
+
+    await expect(stop).rejects.toMatchObject({
+      code: ErrorCode.SandboxSaveFailed,
+      details: { step: "pause" },
+    });
+    expect(events).toEqual(["STOP rejected", "resumed"]);
+    expect(container.running).toBe(true);
+  });
+
+  test("when the save fails and the resume is rejected, then the save error is kept and the next request checks health", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { server, container, backups } = setup();
+    await server.ensureReady();
+    vi.spyOn(backups, "save").mockRejectedValueOnce(new Error("R2 unavailable"));
+    container.rejects.add(Command.resumeOpencode.join(" "));
+    const checked = container.healthChecks;
+
+    const stop = server.stop();
+    await expect(stop).rejects.toMatchObject({
+      code: ErrorCode.SandboxSaveFailed,
+      details: { step: "save" },
+      cause: new Error("R2 unavailable"),
+    });
+    container.rejects.clear();
+    await server.ensureReady();
+
+    expect(errors).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "sandbox_resume_failed" }),
+    );
+    expect(container.healthChecks).toBeGreaterThan(checked);
   });
 });

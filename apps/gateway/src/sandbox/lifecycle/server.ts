@@ -237,9 +237,11 @@ export class OpencodeServer {
     if (restored) {
       // Without a pause the archive could hold half-written files, so a failed pause keeps the
       // container running and the previous backup as the restore point.
-      if (!(await this.succeeds(Command.pauseOpencode))) {
+      const paused = await this.attempt(Command.pauseOpencode);
+      if (paused !== true) {
         await this.resumeOpencode(reason);
         throw new GatewayError(ErrorCode.SandboxSaveFailed, {
+          ...(paused === false ? {} : { cause: paused.error }),
           details: { reason, step: "pause" },
         });
       }
@@ -262,9 +264,21 @@ export class OpencodeServer {
   }
 
   private async resumeOpencode(reason: string): Promise<void> {
-    if (!(await this.succeeds(Command.resumeOpencode))) {
+    const resumed = await this.attempt(Command.resumeOpencode);
+    if (resumed !== true) {
       this.ready = false;
-      log.error("sandbox_resume_failed", { reason });
+      log.error("sandbox_resume_failed", {
+        reason,
+        ...(resumed === false ? {} : describeError(resumed.error)),
+      });
+    }
+  }
+
+  private async attempt(command: readonly string[]): Promise<boolean | { error: unknown }> {
+    try {
+      return await this.succeeds(command);
+    } catch (error) {
+      return { error };
     }
   }
 
