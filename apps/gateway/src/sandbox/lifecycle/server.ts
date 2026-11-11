@@ -8,21 +8,58 @@ import { describeError, log } from "@/lib/log";
 import type { WorkspaceBackups } from "../backups/backups.ts";
 import { Command, OPENCODE_PORT, containerEnv } from "../container/layout.ts";
 import { ServerInfoSchema, type ServerInfo } from "../container/opencode-responses.ts";
-import { githubApp, type GitIdentity } from "../github/github-app.ts";
-import { GITHUB_HOSTS } from "../github/outbound.ts";
+import type { GitIdentity } from "../github/github-app.ts";
+import type { SandboxGithub } from "../github/sandbox-github.ts";
 import type { Activity } from "./activity.ts";
-import { loadOrCreatePassword } from "./password.ts";
+import { loadOrCreatePassword, type PasswordStore } from "./password.ts";
+import { Transitions } from "./transitions.ts";
 
 const STARTUP_DEADLINE_MS = 60_000;
 const READY_POLL_INTERVAL_MS = 500;
 const INFO_TIMEOUT_MS = 2_000;
 const IDLE_CHECK_INTERVAL_MS = 60_000;
 
-export type ServerConfig = Pick<Config, "instance" | "inactivityTimeoutMs" | "github">;
+export type ServerConfig = Pick<Config, "instance" | "inactivityTimeoutMs">;
+
+export type ServerPort = Pick<Fetcher, "fetch">;
 
 export interface RunningServer {
-  port: Fetcher;
+  port: ServerPort;
   client: OpenCodeClient;
+}
+
+export interface SandboxContainer {
+  readonly running: boolean;
+  readonly images: Record<string, string>;
+  start(options: ContainerStartupOptions): void;
+  monitor(): Promise<void>;
+  destroy(): Promise<void>;
+  getTcpPort(port: number): ServerPort;
+  setInactivityTimeout(durationMs: number): Promise<void>;
+  exec(command: string[], options: ContainerExecOptions): Promise<Pick<ExecProcess, "exitCode">>;
+}
+
+export interface ServerStorage extends PasswordStore {
+  getAlarm(): Promise<number | null>;
+  setAlarm(scheduledTime: number): Promise<void>;
+  deleteAlarm(): Promise<void>;
+  deleteAll(): Promise<void>;
+}
+
+export interface ServerDeps {
+  container: SandboxContainer;
+  storage: ServerStorage;
+  config: ServerConfig;
+  backups: Pick<WorkspaceBackups, "latest" | "restoreLatest" | "save" | "deleteLatest">;
+  activity: Pick<Activity, "isIdle">;
+  github: SandboxGithub | null;
+  wait?: (ms: number) => Promise<void>;
+}
+
+interface TransitionResults extends Record<string, unknown> {
+  start: RunningServer;
+  stop: undefined;
+  destroy: undefined;
 }
 
 export interface ServerStatus {
@@ -33,38 +70,42 @@ export interface ServerStatus {
 }
 
 export class OpencodeServer {
+  private readonly container: SandboxContainer;
+  private readonly storage: ServerStorage;
+  private readonly config: ServerConfig;
+  private readonly backups: ServerDeps["backups"];
+  private readonly activity: ServerDeps["activity"];
+  private readonly github: SandboxGithub | null;
+  private readonly wait: (ms: number) => Promise<void>;
+  private readonly transitions = new Transitions<TransitionResults>();
   private ready = false;
-  private starting: Promise<RunningServer> | null = null;
-  private stopping: Promise<void> | null = null;
   private password: string | null = null;
   private destroying = false;
 
-  constructor(
-    private readonly ctx: DurableObjectState,
-    private readonly config: ServerConfig,
-    private readonly backups: WorkspaceBackups,
-    private readonly activity: Activity,
-    private readonly userId: string,
-    private readonly identityInstallation: () => Promise<number | null>,
-  ) {
-    const container = ctx.container;
-    if (container?.running) {
-      void ctx.blockConcurrencyWhile(async () => {
-        await container.setInactivityTimeout(this.safetyTimeoutMs());
-        await this.interceptGithub(container);
-      });
-      this.watch(container);
+  constructor(deps: ServerDeps) {
+    this.container = deps.container;
+    this.storage = deps.storage;
+    this.config = deps.config;
+    this.backups = deps.backups;
+    this.activity = deps.activity;
+    this.github = deps.github;
+    this.wait = deps.wait ?? ((ms) => scheduler.wait(ms));
+  }
+
+  async resume(): Promise<void> {
+    if (!this.container.running) {
+      return;
     }
+    this.watch();
+    await this.container.setInactivityTimeout(this.safetyTimeoutMs());
+    await this.github?.intercept();
   }
 
   async ensureReady(): Promise<RunningServer> {
-    await settled(this.stopping);
-    const container = this.container();
-    if (container.running && this.ready) {
-      return this.connect(container);
+    if (!this.transitions.busy && this.container.running && this.ready) {
+      return this.connect();
     }
-    this.starting ??= this.startOnce(container);
-    return this.starting;
+    return this.transitions.run("start", () => this.startOnce());
   }
 
   markUnhealthy(): void {
@@ -73,73 +114,71 @@ export class OpencodeServer {
 
   async status(): Promise<ServerStatus> {
     const lastSavedAt = await this.lastSavedAt();
-    const container = this.ctx.container;
-    if (!container?.running) {
+    if (!this.container.running) {
       return { running: false, ready: false, version: null, lastSavedAt };
     }
-    const info = await fetchInfo(await this.connect(container));
+    const info = await fetchInfo(await this.connect());
     return { running: true, ready: info !== null, version: info?.version ?? null, lastSavedAt };
   }
 
   stop(): Promise<void> {
-    return this.saveAndStop("admin");
+    return this.transitions.run("stop", () => this.saveThenDestroy("admin"));
   }
 
-  async destroy(): Promise<void> {
-    await settled(this.starting);
-    await settled(this.stopping);
-    const container = this.ctx.container;
-    this.ready = false;
-    if (container?.running) {
-      this.destroying = true;
-      await container.destroy();
-    }
-    await this.backups.deleteLatest();
-    await this.ctx.storage.deleteAlarm();
-    await this.ctx.storage.deleteAll();
-    this.password = null;
-    log.info("sandbox_destroyed", {});
+  destroy(): Promise<void> {
+    return this.transitions.run("destroy", () => this.destroyNow());
   }
 
   async checkIdle(): Promise<void> {
-    const container = this.ctx.container;
-    if (!container?.running) {
+    if (!this.container.running) {
       return;
     }
-    const idle =
-      this.starting === null &&
-      this.stopping === null &&
-      this.activity.isIdle(this.config.inactivityTimeoutMs);
-    if (idle) {
+    if (!this.transitions.busy && this.activity.isIdle(this.config.inactivityTimeoutMs)) {
       try {
-        await this.saveAndStop("idle");
+        await this.transitions.run("stop", () => this.saveThenDestroy("idle"));
         return;
       } catch (error) {
         log.error("sandbox_idle_save_failed", describeError(error));
       }
     }
-    await container.setInactivityTimeout(this.safetyTimeoutMs());
+    await this.container.setInactivityTimeout(this.safetyTimeoutMs());
     await this.scheduleIdleCheck();
   }
 
+  private async destroyNow(): Promise<undefined> {
+    this.ready = false;
+    if (this.container.running) {
+      this.destroying = true;
+      await this.container.destroy();
+    }
+    await this.backups.deleteLatest();
+    await this.storage.deleteAlarm();
+    await this.storage.deleteAll();
+    this.password = null;
+    log.info("sandbox_destroyed", {});
+    return undefined;
+  }
+
   // https://developers.cloudflare.com/containers/guides/migrate-to-durable-object-container-api/
-  private async startOnce(container: Container): Promise<RunningServer> {
+  private async startOnce(): Promise<RunningServer> {
+    if (this.container.running && this.ready) {
+      return this.connect();
+    }
     try {
-      return await this.start(container);
+      return await this.start();
     } catch (cause) {
       throw cause instanceof GatewayError
         ? cause
         : new GatewayError(ErrorCode.SandboxStartFailed, { cause });
-    } finally {
-      this.starting = null;
     }
   }
 
-  private async start(container: Container): Promise<RunningServer> {
+  private async start(): Promise<RunningServer> {
+    const container = this.container;
     if (!container.running) {
       this.ready = false;
       this.destroying = false;
-      const github = await this.connectGithub(container);
+      const github = await this.connectGithub();
       container.start({
         image: container.images.opencode,
         instance: this.config.instance,
@@ -148,20 +187,20 @@ export class OpencodeServer {
         enableInternet: true,
       });
       await container.setInactivityTimeout(this.safetyTimeoutMs());
-      this.watch(container);
+      this.watch();
     }
 
-    if (!(await this.succeeds(container, Command.isReady))) {
+    if (!(await this.succeeds(Command.isReady))) {
       try {
         await this.backups.restoreLatest();
       } catch (cause) {
         throw new GatewayError(ErrorCode.SandboxRestoreFailed, { cause });
       }
-      await this.run(container, Command.markReady);
+      await this.run(Command.markReady);
     }
     await this.scheduleIdleCheck();
 
-    const server = await this.connect(container);
+    const server = await this.connect();
     const deadline = Date.now() + STARTUP_DEADLINE_MS;
     while (Date.now() < deadline) {
       if (!container.running) {
@@ -173,71 +212,35 @@ export class OpencodeServer {
         this.ready = true;
         return server;
       }
-      await scheduler.wait(READY_POLL_INTERVAL_MS);
+      await this.wait(READY_POLL_INTERVAL_MS);
     }
     throw new GatewayError(ErrorCode.SandboxStartTimeout, {
       details: { timeoutMs: STARTUP_DEADLINE_MS },
     });
   }
 
-  private async connectGithub(
-    container: Container,
-  ): Promise<{ identity: GitIdentity | null } | null> {
-    const github = this.config.github;
-    if (!github) {
+  private async connectGithub(): Promise<{ identity: GitIdentity | null } | null> {
+    if (!this.github) {
       return null;
     }
-    await this.interceptGithub(container);
-    const installationId = await this.identityInstallation();
-    if (installationId === null) {
-      return { identity: null };
-    }
-    try {
-      return { identity: await githubApp(github).botIdentity(installationId) };
-    } catch (error) {
-      log.warn("github_identity_failed", describeError(error));
-      return { identity: null };
-    }
+    await this.github.intercept();
+    return { identity: await this.github.identity() };
   }
 
-  // https://developers.cloudflare.com/containers/api/durable-object-container/
-  private async interceptGithub(container: Container): Promise<void> {
-    if (!this.config.github) {
-      return;
-    }
-    const outbound = this.ctx.exports.GithubOutbound({ props: { userId: this.userId } });
-    for (const host of GITHUB_HOSTS) {
-      await container.interceptOutboundHttps(host, outbound);
-    }
-  }
-
-  private saveAndStop(reason: string): Promise<void> {
-    this.stopping ??= this.stopOnce(reason);
-    return this.stopping;
-  }
-
-  private async stopOnce(reason: string): Promise<void> {
-    try {
-      await this.saveThenDestroy(reason);
-    } finally {
-      this.stopping = null;
-    }
-  }
-
-  private async saveThenDestroy(reason: string): Promise<void> {
-    const container = this.ctx.container;
-    if (!container?.running) {
+  private async saveThenDestroy(reason: string): Promise<undefined> {
+    const container = this.container;
+    if (!container.running) {
       this.ready = false;
-      return;
+      return undefined;
     }
-    const restored = this.ready || (await this.succeeds(container, Command.isReady));
+    const restored = this.ready || (await this.succeeds(Command.isReady));
     if (restored) {
-      await this.succeeds(container, Command.pauseOpencode);
+      await this.succeeds(Command.pauseOpencode);
       try {
         const saved = await this.backups.save();
         log.info("sandbox_saved", { reason, bytes: saved.record.size });
       } catch (cause) {
-        await this.succeeds(container, Command.resumeOpencode);
+        await this.succeeds(Command.resumeOpencode);
         throw new GatewayError(ErrorCode.SandboxSaveFailed, { cause, details: { reason } });
       }
     }
@@ -245,11 +248,12 @@ export class OpencodeServer {
     log.info("sandbox_stopped", { reason, saved: restored });
     this.destroying = true;
     await container.destroy();
+    return undefined;
   }
 
   private async scheduleIdleCheck(): Promise<void> {
-    if ((await this.ctx.storage.getAlarm()) === null) {
-      await this.ctx.storage.setAlarm(Date.now() + IDLE_CHECK_INTERVAL_MS);
+    if ((await this.storage.getAlarm()) === null) {
+      await this.storage.setAlarm(Date.now() + IDLE_CHECK_INTERVAL_MS);
     }
   }
 
@@ -257,19 +261,22 @@ export class OpencodeServer {
     return this.config.inactivityTimeoutMs + 5 * IDLE_CHECK_INTERVAL_MS;
   }
 
-  private async succeeds(container: Container, command: readonly string[]): Promise<boolean> {
-    const process = await container.exec([...command], { stdout: "ignore", stderr: "ignore" });
+  private async succeeds(command: readonly string[]): Promise<boolean> {
+    const process = await this.container.exec([...command], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
     return (await process.exitCode) === 0;
   }
 
-  private async run(container: Container, command: readonly string[]): Promise<void> {
-    if (!(await this.succeeds(container, command))) {
+  private async run(command: readonly string[]): Promise<void> {
+    if (!(await this.succeeds(command))) {
       throw new Error(`command failed: ${command.join(" ")}`);
     }
   }
 
-  private async connect(container: Container): Promise<RunningServer> {
-    const port = container.getTcpPort(OPENCODE_PORT);
+  private async connect(): Promise<RunningServer> {
+    const port = this.container.getTcpPort(OPENCODE_PORT);
     const client = OpenCode.make({
       baseUrl: "http://container",
       fetch: (input, init) => port.fetch(input, init),
@@ -278,13 +285,13 @@ export class OpencodeServer {
     return { port, client };
   }
 
-  private watch(container: Container): void {
-    void this.watchUntilExit(container);
+  private watch(): void {
+    void this.watchUntilExit();
   }
 
-  private async watchUntilExit(container: Container): Promise<void> {
+  private async watchUntilExit(): Promise<void> {
     try {
-      await container.monitor();
+      await this.container.monitor();
     } catch (error) {
       if (!this.destroying) {
         log.warn("sandbox_exited", describeError(error));
@@ -304,16 +311,8 @@ export class OpencodeServer {
   }
 
   private async loadPassword(): Promise<string> {
-    this.password ??= await loadOrCreatePassword(this.ctx.storage);
+    this.password ??= await loadOrCreatePassword(this.storage);
     return this.password;
-  }
-
-  private container(): Container {
-    const container = this.ctx.container;
-    if (!container) {
-      throw new GatewayError(ErrorCode.SandboxNotConfigured);
-    }
-    return container;
   }
 }
 
@@ -324,13 +323,5 @@ async function fetchInfo({ client }: RunningServer): Promise<ServerInfo | null> 
     return parsed.success ? parsed.output : null;
   } catch {
     return null;
-  }
-}
-
-async function settled(promise: Promise<unknown> | null): Promise<void> {
-  try {
-    await promise;
-  } catch {
-    return;
   }
 }
