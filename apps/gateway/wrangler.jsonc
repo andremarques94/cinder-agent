@@ -3,6 +3,7 @@
   "name": "cinder-agent-gateway",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-10",
+  "compatibility_flags": ["nodejs_compat"],
   "upload_source_maps": true,
   "observability": { "enabled": true },
 
@@ -28,6 +29,7 @@
       },
     },
   ],
+  "r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "cinder-agent-backups" }],
   "durable_objects": {
     "bindings": [{ "name": "OPENCODE_SANDBOX", "class_name": "OpencodeSandbox" }],
   },

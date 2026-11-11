@@ -10,6 +10,7 @@
     "test": "vp test"
   },
   "dependencies": {
+    "@cloudflare/sandbox": "catalog:",
     "@opencode/client": "catalog:",
     "hono": "catalog:",
     "valibot": "catalog:"

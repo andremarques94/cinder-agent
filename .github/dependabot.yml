@@ -9,6 +9,7 @@ updates:
       default-days: 7
     ignore:
       - dependency-name: "@opencode/client"
+      - dependency-name: "@cloudflare/sandbox"
     groups:
       vite-plus:
         patterns: ["vite-plus", "@voidzero-dev/*"]
@@ -30,3 +31,5 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: "cloudflare/sandbox"

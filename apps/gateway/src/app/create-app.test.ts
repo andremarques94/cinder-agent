@@ -31,7 +31,7 @@ function fakeSandboxes({ failPairing = false, pairingCode = "one-time-code" } = 
       }
       return { code: pairingCode, expiresIn: 300 };
     },
-    status: async () => ({ running: true, ready: true, version: "2.2.7" }),
+    status: async () => ({ running: true, ready: true, version: "2.2.7", lastSavedAt: null }),
     stop: async () => {
       calls.push(`${name} stop`);
     },
@@ -118,7 +118,12 @@ describe("admin API", () => {
   test("status and stop", async () => {
     const { app, calls } = gateway();
     const status = await app.request(`${ADMIN}/admin/sandboxes/ada`, bearer(TOKEN));
-    expect(await status.json()).toEqual({ running: true, ready: true, version: "2.2.7" });
+    expect(await status.json()).toEqual({
+      running: true,
+      ready: true,
+      version: "2.2.7",
+      lastSavedAt: null,
+    });
 
     const stop = await app.request(`${ADMIN}/admin/sandboxes/ada`, {
       method: "DELETE",

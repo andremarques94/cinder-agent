@@ -10,13 +10,12 @@ RUN npm install --global --ignore-scripts "@opencode/cli-linux-x64-baseline@${OP
   && ln -s /usr/local/lib/node_modules/@opencode/cli-linux-x64-baseline/bin/opencode /usr/local/bin/opencode \
   && opencode --version
 
+COPY --from=docker.io/cloudflare/sandbox:1.0.3 /usr/local/bin/sandbox-shim /usr/local/bin/sandbox-shim
+
 COPY opencode.json /etc/opencode/opencode.json
+COPY --chmod=755 start.sh /usr/local/bin/cinder-start
 
 ENV HOME=/root \
-  XDG_CONFIG_HOME=/root/.config \
-  XDG_DATA_HOME=/root/.local/share \
-  XDG_STATE_HOME=/root/.local/state \
-  XDG_CACHE_HOME=/root/.cache \
   OPENCODE_DISABLE_AUTOUPDATE=1
 
-WORKDIR /workspace
+CMD ["cinder-start"]

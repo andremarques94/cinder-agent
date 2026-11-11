@@ -1,7 +1,11 @@
 import { HttpStatus, WebSocketClose, forwardableCloseCode } from "@/http";
 
 // https://developers.cloudflare.com/sandbox/previews/#keep-websocket-connections-open
-export function bridgeWebSocket(upstream: WebSocket, protocol: string | null): Response {
+export function bridgeWebSocket(
+  upstream: WebSocket,
+  protocol: string | null,
+  onClose: () => void,
+): Response {
   const { 0: client, 1: server } = new WebSocketPair();
 
   upstream.binaryType = "arraybuffer";
@@ -9,8 +13,8 @@ export function bridgeWebSocket(upstream: WebSocket, protocol: string | null): R
   upstream.accept();
   server.accept();
 
-  relay(server, upstream);
-  relay(upstream, server);
+  relay(server, upstream, onClose);
+  relay(upstream, server, onClose);
 
   const headers = new Headers();
   if (protocol) {
@@ -19,7 +23,7 @@ export function bridgeWebSocket(upstream: WebSocket, protocol: string | null): R
   return new Response(null, { status: HttpStatus.SwitchingProtocols, webSocket: client, headers });
 }
 
-function relay(from: WebSocket, to: WebSocket): void {
+function relay(from: WebSocket, to: WebSocket, onClose: () => void): void {
   from.addEventListener("message", (event) => {
     try {
       to.send(event.data);
@@ -28,6 +32,7 @@ function relay(from: WebSocket, to: WebSocket): void {
     }
   });
   from.addEventListener("close", (event) => {
+    onClose();
     try {
       to.close(forwardableCloseCode(event.code), event.reason);
     } catch {}

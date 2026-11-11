@@ -1,22 +1,40 @@
+import { DirectoryBackup } from "@cloudflare/sandbox";
 import { DurableObject } from "cloudflare:workers";
 import * as v from "valibot";
 
 import { loadConfig } from "@/config";
 import { ErrorCode, GatewayError, errorResponse } from "@/errors";
 
+import { Activity } from "./activity.ts";
+import { WorkspaceBackups } from "./backups.ts";
 import { PairingCodeSchema, type PairingCode } from "./opencode-responses.ts";
 import { proxyToServer } from "./proxy.ts";
 import { OpencodeServer, type ServerStatus } from "./server.ts";
 
+const BACKUP_BINDING = "BACKUPS";
+const BACKUP_PREFIX = "sandboxes/";
+
 export class OpencodeSandbox extends DurableObject<Env> {
+  private readonly activity = new Activity();
   private readonly server: OpencodeServer;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.server = new OpencodeServer(ctx, loadConfig(env));
+    if (!ctx.container) {
+      throw new GatewayError(ErrorCode.SandboxNotConfigured);
+    }
+    const backups = new WorkspaceBackups(
+      new DirectoryBackup(ctx.container, ctx.exports.DirectoryBackupGateway, {
+        binding: BACKUP_BINDING,
+        prefix: BACKUP_PREFIX,
+      }),
+      ctx.storage,
+    );
+    this.server = new OpencodeServer(ctx, loadConfig(env), backups, this.activity);
   }
 
   override async fetch(request: Request): Promise<Response> {
+    this.activity.touch();
     try {
       const { port } = await this.server.ensureReady();
       return await this.proxy(port, request);
@@ -25,7 +43,12 @@ export class OpencodeSandbox extends DurableObject<Env> {
     }
   }
 
+  override async alarm(): Promise<void> {
+    await this.server.checkIdle();
+  }
+
   async pair(): Promise<PairingCode> {
+    this.activity.touch();
     const { client } = await this.server.ensureReady();
     return v.parse(PairingCodeSchema, await client.server.pair());
   }
@@ -40,7 +63,7 @@ export class OpencodeSandbox extends DurableObject<Env> {
 
   private async proxy(port: Fetcher, request: Request): Promise<Response> {
     try {
-      return await proxyToServer(port, request);
+      return await proxyToServer(port, request, this.activity);
     } catch (cause) {
       this.server.markUnhealthy();
       throw new GatewayError(ErrorCode.SandboxNotResponding, { cause });

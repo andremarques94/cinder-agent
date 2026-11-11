@@ -83,6 +83,7 @@ Legend: **purple = we build**, **teal = OpenCode as-is**, **gray = Cloudflare / 
 - Start `opencode serve` (standalone mode, foreground) on a fixed port, `OPENCODE_PASSWORD` from the Worker (one random password per user, stored encrypted in D1 / DO).
 - Disable auto-update and telemetry/share features inside the container.
 - Bake in OpenCode config: default agents, skills, plugins (e.g. an `open_pr` tool that calls back to the gateway), MCP servers, and **permission rules** (no `git push --force`, no pushes outside the user's installed repos, etc.).
+- Use OpenCode **server plugins** for the custom parts: `ctx.tool.transform` for `open_pr`, `permission.hook("evaluate")` / `shell.hook("create.before")` to enforce the push rules in code, `session.hook("model.request")` to route API-key traffic through AI Gateway. Plugins can't add HTTP routes or hook incoming auth, so routing and pairing stay in the gateway.
 - Outbound allowlist (Sandbox outbound control): GitHub, AI Gateway, OpenAI/ChatGPT auth + Codex endpoints, opencode.ai (Go/Zen), package registries. Everything else blocked.
 
 ### 3.2 Gateway Worker (`apps/gateway/`)
@@ -124,6 +125,7 @@ Logins are done by OpenCode itself and stored **inside that user's sandbox**.
 
 ### 3.6 Persistence
 - Snapshot `/workspace` **and OpenCode's data directory** (sessions + provider credentials) to R2 on idle/stop; restore on start. **Encrypt** snapshots per user (key held by the Worker, not the container).
+- Implemented (M1) with `DirectoryBackup` from `@cloudflare/sandbox`: everything persistent lives under `/persist` and is backed up as one R2 object, restored before `opencode serve` starts. Encryption is R2's at-rest encryption; per-user keys need a custom pipeline (DirectoryBackup has no hook) and are deferred. Container snapshots were rejected: tied to the image version and expire after 30 days.
 - D1: users, GitHub identities, installations, projects, sandbox metadata. Durable Object: live state (awake/asleep, last activity, active sessions).
 
 ## 4. Security rules (non-negotiable)
@@ -186,6 +188,9 @@ Use `wrangler` (Workers Paid plan required for Sandbox/Containers), TypeScript t
 - OpenCode web, service, pairing, auth: https://opencode.ai/docs/cli/web
 - OpenCode HTTP API (v2): https://opencode.ai/v2/docs/api — OpenAPI: https://opencode.ai/docs/openapi.json
 - OpenCode client (`@opencode/client`): https://opencode.ai/v2/docs/build/client/
+- OpenCode server plugins (tools, permission/shell/model hooks, plugin storage): https://opencode.ai/docs/build/plugins/server
+- OpenCode embedded SDK (`@opencode/sdk`; not needed, we run `opencode serve` and use `@opencode/client`): https://opencode.ai/docs/build/sdk/
+- OpenCode in a Durable Object (`@opencode/sdk/workerd`; no container and state in DO storage, but no filesystem or shell, so it can't clone or build. Revisit for repo-less tasks or if it gains a filesystem): https://opencode.ai/docs/build/sdk/cloudflare/
 - OpenCode GitHub integration: https://opencode.ai/docs/github/
 - OpenCode Go: https://opencode.ai/docs/go/
 - Cloudflare Sandbox SDK: https://developers.cloudflare.com/sandbox/
