@@ -1,37 +1,43 @@
 import { DatabaseSync } from "node:sqlite";
 
-import type { Database, Statement } from "@/users";
+import { drizzle } from "drizzle-orm/sqlite-proxy";
 
-import users from "../../migrations/0001_users.sql?raw";
+import type { Database } from "@/users";
+
+import users from "../../migrations/0000_users.sql?raw";
 
 const MIGRATIONS = [users];
 
+type Method = "run" | "all" | "values" | "get";
+
+// https://orm.drizzle.team/docs/connect-drizzle-proxy
 export function migratedDatabase(): Database {
   const sqlite = new DatabaseSync(":memory:");
   for (const migration of MIGRATIONS) {
     sqlite.exec(migration);
   }
 
-  const statement = (query: string, values: (string | number | null)[] = []): Statement => {
-    return {
-      bind: (...next) => statement(query, next),
-      first: async () => sqlite.prepare(query).get(...values) ?? null,
-      all: async () => ({ results: sqlite.prepare(query).all(...values) }),
-      run: async () => ({
-        meta: { changes: Number(sqlite.prepare(query).run(...values).changes) },
-      }),
-    };
+  const query = (sql: string, params: unknown[], method: Method) => {
+    const statement = sqlite.prepare(sql);
+    const values = params.map(toSqlValue);
+    if (method === "run") {
+      statement.run(...values);
+      return { rows: [] };
+    }
+    if (method === "get") {
+      throw new Error(
+        "use .limit(1).all() instead of .get(): the proxy can't return a missing row",
+      );
+    }
+    return { rows: statement.all(...values).map((row) => Object.values(row)) };
   };
 
-  return {
-    prepare: (query) => statement(query),
-    async batch(statements) {
+  return drizzle(
+    async (sql, params, method) => query(sql, params, method),
+    async (batch) => {
       sqlite.exec("BEGIN");
       try {
-        const results = [];
-        for (const next of statements) {
-          results.push(await next.run());
-        }
+        const results = batch.map(({ sql, params, method }) => query(sql, params, method));
         sqlite.exec("COMMIT");
         return results;
       } catch (error) {
@@ -39,5 +45,17 @@ export function migratedDatabase(): Database {
         throw error;
       }
     },
-  };
+  );
+}
+
+function toSqlValue(value: unknown): string | number | bigint | null {
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "bigint" ||
+    value === null
+  ) {
+    return value;
+  }
+  throw new Error(`unsupported SQL parameter: ${typeof value}`);
 }

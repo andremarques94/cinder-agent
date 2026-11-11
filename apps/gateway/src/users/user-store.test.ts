@@ -4,9 +4,9 @@ import { ErrorCode } from "@/errors";
 import { migratedDatabase } from "@/testing";
 
 import { isSandboxName } from "./sandbox-name.ts";
-import { d1UserStore } from "./user-store.ts";
+import { userStore } from "./user-store.ts";
 
-const store = () => d1UserStore(migratedDatabase(), () => 1_000);
+const store = () => userStore(migratedDatabase(), () => 1_000);
 
 const rejectsWith = (code: ErrorCode) => expect.objectContaining({ code });
 

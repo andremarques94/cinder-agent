@@ -16,14 +16,15 @@ commits, pull requests).
 
 `vp` is installed per project. If it isn't on your `PATH`, use `node_modules/.bin/vp`.
 
-| Command                | What it does                                                           |
-| ---------------------- | ---------------------------------------------------------------------- |
-| `vp install`           | Install dependencies and the git hooks                                 |
-| `vp run ready`         | Format check, lint, types, knip, tests                                 |
-| `vp check --fix`       | Format and fix lint issues                                             |
-| `vp run dev`           | Local D1 tables, then gateway + containers on port 8787 (needs Docker) |
-| `scripts/smoke.sh`     | Invite `me`, then check the running dev server end to end              |
-| `vp run gateway#types` | Regenerate `worker-configuration.d.ts` after changing `wrangler.jsonc` |
+| Command                      | What it does                                                           |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| `vp install`                 | Install dependencies and the git hooks                                 |
+| `vp run ready`               | Format check, lint, types, knip, tests                                 |
+| `vp check --fix`             | Format and fix lint issues                                             |
+| `vp run dev`                 | Local D1 tables, then gateway + containers on port 8787 (needs Docker) |
+| `scripts/smoke.sh`           | Invite `me`, then check the running dev server end to end              |
+| `vp run gateway#types`       | Regenerate `worker-configuration.d.ts` after changing `wrangler.jsonc` |
+| `vp run gateway#db:generate` | Generate a D1 migration after changing `src/users/schema.ts`           |
 
 ## Before you say you're done
 
@@ -55,4 +56,6 @@ commits, pull requests).
 - Sandboxes come from D1, not config: invite users with `POST /admin/users`. Locally,
   `app.localhost` signs in as `access.dev` in `wrangler.jsonc`, and `ACCESS_AUD` in `.dev.vars`
   must match its `aud`.
-- After changing `migrations/`, the D1 test helper in `src/testing/` must list the new file.
+- D1 tables are defined in `apps/gateway/src/users/schema.ts` (Drizzle). After changing it, run
+  `vp run gateway#db:generate --name <change>` and add the new migration to the list in
+  `apps/gateway/src/testing/sqlite-database.ts`. Never edit generated migrations by hand.

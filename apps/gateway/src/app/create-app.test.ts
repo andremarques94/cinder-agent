@@ -5,7 +5,7 @@ import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 import type { Config } from "@/config";
 import type { SandboxDirectory, SandboxHandle } from "@/sandbox";
 import { migratedDatabase } from "@/testing";
-import { d1UserStore, type User } from "@/users";
+import { userStore, type User } from "@/users";
 
 import { createApp } from "./create-app.ts";
 
@@ -30,7 +30,7 @@ interface Options {
 }
 
 async function gateway(options: Options = {}) {
-  const users = d1UserStore(migratedDatabase());
+  const users = userStore(migratedDatabase());
   const ada = await users.create({ email: "ada@example.com", sandbox: "ada" });
   const bob = await users.create({ email: "bob@example.com", sandbox: "bob" });
   const owner = new Map([ada, bob].map((user) => [user.id, user.sandbox]));
