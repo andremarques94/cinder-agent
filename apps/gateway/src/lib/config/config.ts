@@ -65,6 +65,11 @@ const GithubSignInSchema = v.union(
   "set all of GITHUB_APP_SLUG, GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET, or none",
 );
 
+// https://developers.cloudflare.com/containers/api/durable-object-container/#setinactivitytimeout
+// caps the container's timeout at 6 hours, and the sandbox adds 5 minutes to this setting.
+const MAX_INACTIVITY_TIMEOUT_MINUTES = 355;
+const INACTIVITY_TIMEOUT_RANGE = `INACTIVITY_TIMEOUT_MINUTES must be more than 0 and at most ${MAX_INACTIVITY_TIMEOUT_MINUTES}`;
+
 const ConfigSchema = v.pipe(
   v.object({
     SANDBOX_DOMAIN: v.pipe(v.string(), v.minLength(1), v.toLowerCase()),
@@ -72,8 +77,15 @@ const ConfigSchema = v.pipe(
       v.picklist(["lite", "standard-1", "standard-2", "standard-3", "standard-4"]),
       "standard-1",
     ),
-    INACTIVITY_TIMEOUT_MINUTES: v.fallback(
-      v.pipe(v.unknown(), v.transform(Number), v.number(), v.gtValue(0)),
+    INACTIVITY_TIMEOUT_MINUTES: v.optional(
+      v.pipe(
+        v.unknown(),
+        v.transform(Number),
+        v.number(INACTIVITY_TIMEOUT_RANGE),
+        v.finite(INACTIVITY_TIMEOUT_RANGE),
+        v.gtValue(0, INACTIVITY_TIMEOUT_RANGE),
+        v.maxValue(MAX_INACTIVITY_TIMEOUT_MINUTES, INACTIVITY_TIMEOUT_RANGE),
+      ),
       30,
     ),
     ADMIN_TOKEN: v.fallback(v.optional(v.pipe(v.string(), v.minLength(1))), undefined),

@@ -43,7 +43,6 @@ describe("given invalid optional settings", () => {
     const env = {
       ...DOMAIN,
       OPENCODE_INSTANCE: "huge",
-      INACTIVITY_TIMEOUT_MINUTES: "0",
       ADMIN_TOKEN: "",
       ACCESS_AUD: "",
       ACCESS_TEAM_DOMAIN: "https://team.cloudflareaccess.com/",
@@ -66,6 +65,29 @@ describe("given invalid optional settings", () => {
       const config = loadConfig({ ...DOMAIN, ACCESS_TEAM_DOMAIN: domain });
 
       expect(config.accessTeamDomain).toBeUndefined();
+    },
+  );
+});
+
+describe("given an inactivity timeout", () => {
+  test("when it is unset, then it is 30 minutes", () => {
+    const config = loadConfig(DOMAIN);
+
+    expect(config.inactivityTimeoutMs).toBe(30 * 60_000);
+  });
+
+  test("when it is 355 minutes, then it is accepted", () => {
+    const config = loadConfig({ ...DOMAIN, INACTIVITY_TIMEOUT_MINUTES: "355" });
+
+    expect(config.inactivityTimeoutMs).toBe(355 * 60_000);
+  });
+
+  test.each(["356", "360", "0", "-5", "Infinity", "soon", ""])(
+    "when it is %j, then loading fails before any container starts",
+    (minutes) => {
+      const load = () => loadConfig({ ...DOMAIN, INACTIVITY_TIMEOUT_MINUTES: minutes });
+
+      expect(load).toThrow("INACTIVITY_TIMEOUT_MINUTES must be more than 0 and at most 355");
     },
   );
 });

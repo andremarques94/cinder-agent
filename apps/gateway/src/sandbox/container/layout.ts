@@ -35,6 +35,6 @@ function gitIdentityEnv({ name, email }: GitIdentity): Record<string, string> {
 export const Command = {
   isReady: ["test", "-e", `${RUN_DIR}/ready`],
   markReady: ["sh", "-c", `mkdir -p ${RUN_DIR} && touch ${RUN_DIR}/ready`],
-  pauseOpencode: ["sh", "-c", `kill -STOP "$(cat ${RUN_DIR}/opencode.pid)"`],
-  resumeOpencode: ["sh", "-c", `kill -CONT "$(cat ${RUN_DIR}/opencode.pid)"`],
+  pauseOpencode: ["cinder-pause", "STOP", `${RUN_DIR}/opencode.pid`],
+  resumeOpencode: ["cinder-pause", "CONT", `${RUN_DIR}/opencode.pid`],
 } as const;
