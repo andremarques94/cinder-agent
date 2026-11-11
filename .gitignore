@@ -26,3 +26,6 @@ Thumbs.db
 
 .claude/settings.local.json
 .claude/worktrees/
+
+# Local plans, reviews and explorations
+docs/

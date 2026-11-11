@@ -1,9 +1,13 @@
 # Agent guide
 
 cinder-agent runs one OpenCode server per sandbox in a Cloudflare container, behind a Hono
-gateway Worker. Start with [README.md](README.md) (what it is, architecture),
-[PLAN.md](PLAN.md) (milestones and decisions) and [CONTRIBUTING.md](CONTRIBUTING.md) (branches,
-commits, pull requests).
+gateway Worker. Start with [README.md](README.md) (what it is, architecture) and
+[CONTRIBUTING.md](CONTRIBUTING.md) (branches, commits, pull requests).
+
+Plans, reviews and explorations live in `docs/`, which is gitignored and exists only on the
+owner's machine. When it's there, read `docs/PLAN.md` (milestones and decisions) and
+`docs/architecture.md` (how the code works today) before changing behaviour, and keep them up to
+date. Never link to `docs/` from tracked files.
 
 ## Layout
 
@@ -41,7 +45,7 @@ commits, pull requests).
 - Don't commit, push or open pull requests unless asked. No AI attribution in commits or PRs.
 - Work on a branch from `master` named `<type>/<short-description>`.
 - Follow the code style in [CONTRIBUTING.md](CONTRIBUTING.md#code-style), including
-  Given/When/Then tests. Comments only for TODOs and links to the docs the code was taken from.
+  Given/When/Then tests. Comments only for TODOs, doc links, and a short "why" for non-obvious ordering or recovery rules.
 
 ## Gotchas
 
