@@ -97,13 +97,23 @@ runs:
         AUDIENCE: ${{ inputs.oidc-audience }}
         CLIENT_ID: ${{ inputs.oidc-client-id }}
       run: |
-        oidc="$(curl -sSf --oauth2-bearer "${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" | jq -er '.value')"
-        token="$(curl -sSf https://opencode.ai/console/auth/oauth/token \
-          --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
-          --data-urlencode 'subject_token_type=urn:ietf:params:oauth:token-type:jwt' \
-          --data-urlencode "client_id=${CLIENT_ID}" \
-          --data-urlencode "subject_token=${oidc}" | jq -er '.access_token')"
+        if ! oidc_response="$(curl -sSf --oauth2-bearer "${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}")"; then
+          echo "::error::GitHub OIDC token request failed."
+          exit 1
+        fi
+        oidc="$(jq -er '.value' <<< "${oidc_response}")"
+        echo "::add-mask::${oidc}"
+
+        if ! token_response="$(curl -sSf https://opencode.ai/console/auth/oauth/token \
+          -d 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+          -d 'subject_token_type=urn:ietf:params:oauth:token-type:jwt' \
+          -d "client_id=${CLIENT_ID}" \
+          -d "subject_token=${oidc}")"; then
+          echo "::error::OpenCode Console token exchange failed."
+          exit 1
+        fi
+        token="$(jq -er '.access_token' <<< "${token_response}")"
         echo "::add-mask::${token}"
         echo "token=${token}" >> "${GITHUB_OUTPUT}"
 
