@@ -42,6 +42,7 @@ jobs:
         with:
           commit-message: "fix: apply OpenCode changes"
           github-token: ${{ github.token }}
+          oidc-client-id: ${{ vars.OPENCODE_OIDC_CLIENT_ID }}
           pr-number: ${{ github.event.issue.number || github.event.pull_request.number }}
           prompt: comment
           request: ${{ github.event.comment.body }}
@@ -78,6 +79,7 @@ jobs:
           expected-author: dependabot[bot]
           github-token: ${{ github.token }}
           head-ref-prefix: dependabot/
+          oidc-client-id: ${{ vars.OPENCODE_OIDC_CLIENT_ID }}
           pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
           prompt: dependabot
           require-ready: "true"
