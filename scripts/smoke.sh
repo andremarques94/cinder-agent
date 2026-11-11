@@ -60,6 +60,23 @@ else
   check "git can read $repo" in_container "git ls-remote https://github.com/$repo HEAD"
 fi
 
+marker="smoke-$(date +%s)"
+check "a file is written to the workspace" \
+  in_container "echo $marker > /persist/workspace/.smoke-stop-wake"
+stop="$(curl -sS -m 180 -o /dev/null -w '%{http_code}' -X DELETE \
+  -H "Authorization: Bearer $token" "http://localhost:$port/admin/sandboxes/$name")"
+check "admin stop saves and stops the sandbox" sh -c "[ '$stop' = 204 ]"
+check "the container is gone after the stop" \
+  sh -c "[ -z \"\$(docker ps -q --filter id=$container)\" ]"
+check "admin status reports stopped" \
+  sh -c "curl -fsS -m 30 -H 'Authorization: Bearer $token' http://localhost:$port/admin/sandboxes/$name | grep -q '\"running\":false'"
+check "sandbox wakes at $name.localhost:$port" \
+  curl -fsS -m 180 -o /dev/null "http://$name.localhost:$port/"
+container="$(docker ps --format '{{.ID}} {{.Image}}' | awk '/opencodesandbox/ { print $1; exit }')"
+check "the file survived the stop and wake" \
+  in_container "grep -qx $marker /persist/workspace/.smoke-stop-wake"
+in_container "rm -f /persist/workspace/.smoke-stop-wake" > /dev/null 2>&1
+
 if [ "$failures" -gt 0 ]; then
   echo "$failures check(s) failed"
   exit 1
