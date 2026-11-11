@@ -120,6 +120,7 @@ Logins are done by OpenCode itself and stored **inside that user's sandbox**.
 
 ### 3.5 GitHub integration
 - **Our own GitHub App** (contents, pull requests, issues, checks). Each user installs it on their repos; installation ↔ user stored in D1.
+- Implemented (M2) without a plugin: the container gets a placeholder `GH_TOKEN`, and the gateway intercepts HTTPS to `github.com` and `api.github.com` and adds a short-lived installation token (`@octokit/auth-app`). Plain `git` and `gh pr create` cover clone, push and PRs, so an `open_pr` tool would only duplicate them. Single admin for now: App ID, installation ID and key are wrangler vars/secrets; per-user installations come with M3. Code-level push rules (permission hooks) are deferred to the outbound allowlist work.
 - Phase 1: also enable OpenCode's built-in GitHub Action (`/opencode`, `/oc` comments, auto-review on PR open) on repos — zero code, runs in GitHub Actions.
 - Phase 2: our webhooks → **Workflow**: map repo → owning user → wake their sandbox → create session with the issue/PR context → prompt → wait → push branch / open or update PR / post review comment. Retries come from Workflows.
 
@@ -147,17 +148,17 @@ Use `wrangler` (Workers Paid plan required for Sandbox/Containers), TypeScript t
 
 ## 6. Milestones (each ends with a demo-able check)
 
-**M0 — Spike: one sandbox, real OpenCode UI (do first, it de-risks everything)**
+**M0 — Spike: one sandbox, real OpenCode UI (do first, it de-risks everything)** — done
 - Sandbox image with pinned OpenCode 2, `opencode serve` + `OPENCODE_PASSWORD`.
 - Gateway proxies `me.<domain>` to it, including SSE/WebSocket.
 - ✅ OpenCode web UI fully works under the proxied subdomain (assets, cookies, live streaming).
 - ✅ Desktop app connects via a pairing link created with `POST /api/pair`.
 
-**M1 — Persistence**
+**M1 — Persistence** — done
 - Encrypted R2 snapshot/restore of `/workspace` + OpenCode data dir; idle sleep.
 - ✅ Kill the container, reconnect: repos, sessions and provider login are still there.
 
-**M2 — GitHub App**
+**M2 — GitHub App** — done
 - App, install flow, token minting, outbound swap; clone + push + open PR.
 - ✅ From the OpenCode UI: "add a README section and open a PR" produces a PR authored by the app.
 
