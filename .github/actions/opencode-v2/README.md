@@ -16,22 +16,24 @@ published to or consumed from the GitHub Marketplace.
 | Dependabot review  | The `CI` workflow completes for a Dependabot PR, whether CI passed or failed | The workflow actor and PR author are Dependabot; the branch starts with `dependabot/`; the head repository is this repository; the PR is not a draft | Runs the `dependabot.md` prompt, commits and pushes repairs if needed, posts a report, dispatches CI for the resulting SHA, and squash-merges only after that exact SHA passes | Open or update a normal Dependabot PR; no comment is required            |
 | Other PR activity  | Any event that does not meet the checks above                                | Not eligible                                                                                                                                         | The jobs are skipped                                                                                                                                                           | No action is taken                                                       |
 
-The Dependabot path deliberately starts from `workflow_run`. GitHub withholds Actions
-secrets from workflows triggered directly by Dependabot, while the completed-workflow
-event can safely access the model key after the workflow verifies the associated PR again.
+The Dependabot path deliberately starts from `workflow_run`. GitHub restricts OIDC and
+write permissions on workflows triggered directly by Dependabot, while the
+completed-workflow event can request a short-lived Console token after the action verifies
+the associated PR again.
 
 ## Repository setup
 
-### 1. Add the provider key
+### 1. Configure OpenCode Console OIDC
 
-Create an Actions repository secret named `OPENCODE_API_KEY`:
+No long-lived model key is stored in GitHub. OpenCode Console supplied the OAuth client ID
+embedded as the action's `oidc-client-id` default. The workflow requests a GitHub OIDC JWT
+for `https://opencode.ai/console` and exchanges it directly with OpenCode Console for a
+short-lived access token.
 
-1. Open **Settings → Secrets and variables → Actions**.
-2. Select **New repository secret**.
-3. Name it `OPENCODE_API_KEY` and enter an OpenCode Go API key.
-
-The default model is `opencode-go/kimi-k3`. To use another provider, change the `model`
-input in the workflow and pass the matching secret to `api-key`.
+Keep the corresponding GitHub repository trust configured in OpenCode Console. If Console
+issues a replacement client ID, update `oidc-client-id` in the action or pass it explicitly.
+The default model is `opencode/deepseek-v4.1-flash-free`, which OpenCode currently offers
+for free for a limited time.
 
 ### 2. Keep the CI entry point
 
@@ -42,8 +44,8 @@ finish.
 
 ### 3. Configure repository protections
 
-- Permit GitHub Actions to request `contents: write`, `pull-requests: write`, and
-  `actions: write` where the workflow declares them.
+- Permit GitHub Actions to request `id-token: write`, `contents: write`,
+  `pull-requests: write`, and `actions: write` where the workflow declares them.
 - Keep the `CI` check required on the protected default branch.
 - Add any required human approval rules you want. The merge command honors branch
   protection and will not bypass those rules.
@@ -89,40 +91,47 @@ replace that checkout with the PR head checkout; the action checks out PR code s
 under `pr/`.
 
 ```yaml
-- name: Checkout trusted automation
-  uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-  with:
-    ref: ${{ github.sha }}
-    persist-credentials: false
+permissions:
+  contents: write
+  id-token: write
+  issues: write
+  pull-requests: write
 
-- name: Run OpenCode
-  id: opencode
-  uses: ./.github/actions/opencode-v2
-  with:
-    api-key: ${{ secrets.OPENCODE_API_KEY }}
-    commit-message: "fix: apply OpenCode changes"
-    github-token: ${{ github.token }}
-    pr-number: ${{ github.event.pull_request.number }}
-    prompt: comment
-    request: "Review and repair this pull request."
+steps:
+  - name: Checkout trusted automation
+    uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    with:
+      ref: ${{ github.sha }}
+      persist-credentials: false
+
+  - name: Run OpenCode
+    id: opencode
+    uses: ./.github/actions/opencode-v2
+    with:
+      commit-message: "fix: apply OpenCode changes"
+      github-token: ${{ github.token }}
+      pr-number: ${{ github.event.pull_request.number }}
+      prompt: comment
+      request: "Review and repair this pull request."
 ```
 
 ### Inputs
 
-| Input             | Required | Default               | Purpose                                                                                |
-| ----------------- | -------- | --------------------- | -------------------------------------------------------------------------------------- |
-| `api-key`         | Yes      | —                     | Provider credential exposed only to the OpenCode execution step                        |
-| `commit-message`  | Yes      | —                     | Conventional Commit message used only when files changed                               |
-| `github-token`    | Yes      | —                     | Token used for PR reads, checkout, push, and commenting; it is not exposed to OpenCode |
-| `pr-number`       | Yes      | —                     | Pull request to validate and process                                                   |
-| `prompt`          | Yes      | —                     | Markdown filename under `prompts/`, without `.md`                                      |
-| `expected-author` | No       | Empty                 | Requires an exact PR author, such as `dependabot[bot]`                                 |
-| `head-ref-prefix` | No       | Empty                 | Requires the PR branch to begin with a prefix, such as `dependabot/`                   |
-| `model`           | No       | `opencode-go/kimi-k3` | OpenCode provider/model ID                                                             |
-| `request`         | No       | Empty                 | Trusted instructions appended after the maintained prompt                              |
-| `require-ready`   | No       | `false`               | When `true`, rejects draft PRs                                                         |
-| `sha256`          | No       | Pinned digest         | Expected digest of the OpenCode Linux x64 release archive                              |
-| `version`         | No       | `2.2.7`               | Exact OpenCode CLI release                                                             |
+| Input             | Required | Default                             | Purpose                                                                                |
+| ----------------- | -------- | ----------------------------------- | -------------------------------------------------------------------------------------- |
+| `commit-message`  | Yes      | —                                   | Conventional Commit message used only when files changed                               |
+| `github-token`    | Yes      | —                                   | Token used for PR reads, checkout, push, and commenting; it is not exposed to OpenCode |
+| `pr-number`       | Yes      | —                                   | Pull request to validate and process                                                   |
+| `prompt`          | Yes      | —                                   | Markdown filename under `prompts/`, without `.md`                                      |
+| `expected-author` | No       | Empty                               | Requires an exact PR author, such as `dependabot[bot]`                                 |
+| `head-ref-prefix` | No       | Empty                               | Requires the PR branch to begin with a prefix, such as `dependabot/`                   |
+| `model`           | No       | `opencode/deepseek-v4.1-flash-free` | OpenCode provider/model ID                                                             |
+| `oidc-audience`   | No       | `https://opencode.ai/console`       | Audience requested in the GitHub OIDC JWT                                              |
+| `oidc-client-id`  | No       | Console-issued client ID            | OAuth client used for the token exchange                                               |
+| `request`         | No       | Empty                               | Trusted instructions appended after the maintained prompt                              |
+| `require-ready`   | No       | `false`                             | When `true`, rejects draft PRs                                                         |
+| `sha256`          | No       | Pinned digest                       | Expected digest of the OpenCode Linux x64 release archive                              |
+| `version`         | No       | `2.2.7`                             | Exact OpenCode CLI release                                                             |
 
 ### Outputs
 
@@ -142,12 +151,13 @@ and its `SHA256SUMS` asset.
 3. Check out the PR under `pr/` with persisted credentials disabled.
 4. Confirm the checkout still matches the validated SHA and reject tracked symlinks.
 5. Download the exact official OpenCode archive and verify its pinned SHA-256 digest.
-6. Load the selected Markdown prompt and append the run context and optional request.
-7. Run OpenCode with restricted permissions and without a GitHub token.
-8. Reject protected-file edits, then commit and push ordinary edits in a separate step
-   that has the GitHub token but not the model key.
-9. Read the resulting PR head and post the OpenCode report.
-10. For Dependabot, dispatch CI for that exact head, wait for success, recheck the head,
+6. Request a GitHub OIDC JWT and exchange it directly for a short-lived Console token.
+7. Load the selected Markdown prompt and append the run context and optional request.
+8. Run OpenCode with restricted permissions and without a GitHub token.
+9. Reject protected-file edits, then commit and push ordinary edits in a separate step
+   that has the GitHub token but not the Console token.
+10. Read the resulting PR head and post the OpenCode report.
+11. For Dependabot, dispatch CI for that exact head, wait for success, recheck the head,
     and request a squash merge.
 
 ## Security model
@@ -157,8 +167,9 @@ The action separates code, credentials, and privileges by step:
 | Boundary                       | Enforcement                                                                                                                           |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | Trusted automation vs. PR code | The workflow checks out its immutable `github.sha`; the action checks out PR code separately under `pr/`                              |
-| Provider key vs. installer     | Download and extraction explicitly receive empty `OPENCODE_API_KEY` and `GH_TOKEN` values                                             |
-| Provider key vs. GitHub token  | OpenCode receives only `api-key`; validation, push, comments, CI dispatch, and merge receive only `github-token`                      |
+| Console token vs. installer    | Download and extraction explicitly receive empty `OPENCODE_API_KEY` and `GH_TOKEN` values                                             |
+| Console token vs. GitHub token | OpenCode receives only the short-lived exchanged token; repository operations receive only `github-token`                             |
+| Long-lived credentials         | No model credential is stored in GitHub; `id-token: write` is limited to the two jobs that invoke OpenCode                            |
 | OpenCode tools                 | Shell, web access, subagents, external directories, and every unspecified tool are denied                                             |
 | Repository configuration       | Project OpenCode config and external skills are disabled; formatter execution and snapshots are disabled                              |
 | Sensitive paths                | Edits to `.git`, workflows, local actions, and agent configuration are denied; protected-file changes are checked again before commit |
@@ -166,8 +177,8 @@ The action separates code, credentials, and privileges by step:
 | Release supply chain           | The OpenCode version and Linux x64 archive SHA-256 are pinned                                                                         |
 | Merge race                     | CI is selected by exact SHA, and the PR head is compared with that SHA immediately before merge                                       |
 
-The API key is also scanned out of the agent's report: if the exact credential appears,
-the report is deleted and the action fails instead of publishing it.
+The exchanged token is also scanned out of the agent's report: if the exact credential
+appears, the report is deleted and the action fails instead of publishing it.
 
 ### Residual risks
 
