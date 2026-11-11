@@ -14,12 +14,7 @@ inputs:
       required: false,
       default: "https://opencode.ai/console",
     }
-  oidc-client-id:
-    {
-      description: OpenCode Console OAuth client ID,
-      required: false,
-      default: "sk_12cbb559-99d5-483f-ac0a-5ea9dcf80f9a",
-    }
+  oidc-client-id: { description: OpenCode Console OAuth client ID, required: true }
   pr-number: { description: Pull request number, required: true }
   prompt: { description: Prompt template name, required: true }
   request: { description: Trusted request appended to the prompt, required: false, default: "" }

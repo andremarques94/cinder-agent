@@ -25,13 +25,14 @@ the associated PR again.
 
 ### 1. Configure OpenCode Console OIDC
 
-No long-lived model key is stored in GitHub. OpenCode Console supplied the OAuth client ID
-embedded as the action's `oidc-client-id` default. The workflow requests a GitHub OIDC JWT
+No long-lived model key is stored in GitHub. The OpenCode Console OAuth client ID is stored in
+the `OPENCODE_OIDC_CLIENT_ID` repository variable and passed as `oidc-client-id`. The workflow
+requests a GitHub OIDC JWT
 for `https://opencode.ai/console` and exchanges it directly with OpenCode Console for a
 short-lived access token.
 
 Keep the corresponding GitHub repository trust configured in OpenCode Console. If Console
-issues a replacement client ID, update `oidc-client-id` in the action or pass it explicitly.
+issues a replacement client ID, update the `OPENCODE_OIDC_CLIENT_ID` variable.
 The default model is `opencode/deepseek-v4.1-flash-free`, which OpenCode currently offers
 for free for a limited time.
 
@@ -110,6 +111,7 @@ steps:
     with:
       commit-message: "fix: apply OpenCode changes"
       github-token: ${{ github.token }}
+      oidc-client-id: ${{ vars.OPENCODE_OIDC_CLIENT_ID }}
       pr-number: ${{ github.event.pull_request.number }}
       prompt: comment
       request: "Review and repair this pull request."
@@ -127,7 +129,7 @@ steps:
 | `head-ref-prefix` | No       | Empty                               | Requires the PR branch to begin with a prefix, such as `dependabot/`                   |
 | `model`           | No       | `opencode/deepseek-v4.1-flash-free` | OpenCode provider/model ID                                                             |
 | `oidc-audience`   | No       | `https://opencode.ai/console`       | Audience requested in the GitHub OIDC JWT                                              |
-| `oidc-client-id`  | No       | Console-issued client ID            | OAuth client used for the token exchange                                               |
+| `oidc-client-id`  | Yes      |                                     | OpenCode Console OAuth client ID, e.g. `vars.OPENCODE_OIDC_CLIENT_ID`                  |
 | `request`         | No       | Empty                               | Trusted instructions appended after the maintained prompt                              |
 | `require-ready`   | No       | `false`                             | When `true`, rejects draft PRs                                                         |
 | `sha256`          | No       | Pinned digest                       | Expected digest of the OpenCode Linux x64 release archive                              |
