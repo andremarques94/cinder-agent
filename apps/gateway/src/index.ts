@@ -1,10 +1,10 @@
 import { createApp } from "@/app";
-import { loadConfig } from "@/config";
+import { loadConfig } from "@/lib/config";
 import { durableObjectDirectory } from "@/sandbox";
 import { d1UserStore } from "@/users";
 
 export { DirectoryBackupGateway } from "@cloudflare/sandbox";
-export { GithubOutbound, OpencodeSandbox } from "@/sandbox";
+export { GithubOutbound, OpencodeSandbox } from "./sandbox/worker.ts";
 
 export default createApp((env) => ({
   config: loadConfig(env),

@@ -4,9 +4,10 @@ import { HTTPException } from "hono/http-exception";
 
 import { accountRoutes, type AccountVariables } from "@/account";
 import { adminRoutes, type AdminVariables } from "@/admin";
-import { ErrorCode, GatewayError, errorResponse } from "@/errors";
-import { HttpStatus } from "@/http";
-import { classifyHost } from "@/routing";
+import { ErrorCode, GatewayError, errorResponse } from "@/lib/errors";
+import { HttpStatus } from "@/lib/http";
+
+import { classifyHost } from "./hosts/classify-host.ts";
 
 export type GatewayDeps = AdminVariables;
 
