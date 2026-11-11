@@ -24,10 +24,10 @@ src/
     index.ts              Runtime-free: SandboxDirectory, hostnames, pairing links
     worker.ts             Runtime classes: OpencodeSandbox, GithubOutbound
     durable-object/       The Durable Object and the directory that names it by user ID
-    lifecycle/            Start, readiness, idle stop, destroy; password
+    lifecycle/            Start, stop and destroy in one queue; readiness, idle stop; password
     container/            Ports, paths, env and commands inside the container
     proxy/                HTTP and WebSocket proxying to opencode serve
-    backups/              /persist backups in R2
+    backups/              /persist backups in R2; sweeps old archives under the user's prefix
     github/               GitHub App tokens and the outbound handler that picks one by repo owner
     pairing/              Pairing links
   lib/                    config, errors, log, http (imported as @/lib/<name>)
