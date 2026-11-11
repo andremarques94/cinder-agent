@@ -1,1 +1,2 @@
-export { adminRoutes, type AdminVariables } from "./admin-routes.ts";
+export { adminRoutes } from "./admin-routes.ts";
+export type { AdminVariables } from "./admin-env.ts";

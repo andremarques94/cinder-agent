@@ -58,4 +58,5 @@ commits, pull requests).
   must match its `aud`.
 - D1 tables are defined in `apps/gateway/src/users/schema.ts` (Drizzle). After changing it, run
   `vp run gateway#db:generate --name <change>` and add the new migration to the list in
-  `apps/gateway/src/testing/sqlite-database.ts`. Never edit generated migrations by hand.
+  `apps/gateway/src/testing/sqlite-database.ts`. Migrations go to
+  `apps/gateway/src/users/migrations/`; never edit them by hand.
