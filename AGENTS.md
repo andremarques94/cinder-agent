@@ -11,6 +11,8 @@ commits, pull requests).
   code rules. Follow them; `vp check` enforces most.
 - `sandbox/`: container image (`Dockerfile`, `start.sh`, baked-in `opencode.json`).
 - `scripts/smoke.sh`: end-to-end check against `vp run dev`.
+- `DESIGN.md`: the dashboard's design system. Read it before changing anything under
+  `apps/gateway/src/account/`.
 
 ## Commands
 

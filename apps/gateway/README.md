@@ -12,6 +12,7 @@ src/
     me/                   GET /api/me
     pairing/              POST /api/pair, POST /devices/pair (QR code)
     github/               /github: App install, user OAuth, linking and unlinking installations
+    fonts/                GET /fonts/inter.woff2: Inter, bundled by wrangler (see DESIGN.md)
   admin/                  /admin, behind ADMIN_TOKEN
     users/                /admin/users, /admin/users/:id/github
     sandboxes/            /admin/sandboxes/:name: pair, status, stop

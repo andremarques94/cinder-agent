@@ -2,7 +2,7 @@ import type { UserStore } from "@/users";
 
 import type { GithubInstallation, GithubSignIn, GithubUser } from "./github-sign-in.ts";
 
-export interface LinkedInstallation {
+interface LinkedInstallation {
   installationId: number;
   login: string;
 }

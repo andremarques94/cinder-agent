@@ -1,5 +1,6 @@
 export const HttpStatus = {
   SwitchingProtocols: 101,
+  Ok: 200,
   Created: 201,
   NoContent: 204,
   SeeOther: 303,

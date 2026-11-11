@@ -75,6 +75,10 @@ The `commit-msg` hook rejects messages that don't follow this.
   that stays is small, named and inside a schema.
 - Comments only for TODOs and links to the docs the code was taken from.
 
+The dashboard's look (colours, type, layout, components and the rules behind them) is in
+[DESIGN.md](DESIGN.md). Build new screens from it; change it in the same pull request when a
+screen needs something it doesn't have.
+
 Tests sit next to the code (`thing.ts` → `thing.test.ts`) and follow Given/When/Then:
 
 - Every test is in a `describe("given …")` with a `test("when …, then …")` title. _(lint:

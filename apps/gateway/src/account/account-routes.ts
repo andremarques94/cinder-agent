@@ -6,6 +6,7 @@ import { CACHE_CONTROL, NO_STORE } from "@/lib/http";
 
 import { accessEmail } from "./access/access-identity.ts";
 import type { AccountEnv } from "./account-env.ts";
+import { fontRoutes } from "./fonts/font-routes.ts";
 import { githubRoutes } from "./github/github-routes.tsx";
 import { homePage } from "./home/home-page.tsx";
 import { meRoutes } from "./me/me-routes.ts";
@@ -27,6 +28,7 @@ export const accountRoutes = new Hono<AccountEnv>()
     await next();
   })
   .use(csrf())
+  .route("/", fontRoutes)
   .route("/", homePage)
   .route("/api/me", meRoutes)
   .route("/github", githubRoutes)
