@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/andremarques94/cinder-agent/compare/v0.3.0...v0.4.0) (2026-11-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **gateway:** add the M4 dashboard with self-service GitHub installs ([#17](https://github.com/andremarques94/cinder-agent/issues/17))
+
+### Features
+
+* **gateway:** add the M4 dashboard with self-service GitHub installs ([#17](https://github.com/andremarques94/cinder-agent/issues/17)) ([e6a09f4](https://github.com/andremarques94/cinder-agent/commit/e6a09f4b477e5a53db746fc1c20568943318b806))
+* **gateway:** redesign the dashboard and follow the code style rules ([#18](https://github.com/andremarques94/cinder-agent/issues/18)) ([0a1e183](https://github.com/andremarques94/cinder-agent/commit/0a1e183b7c6c10605bd60c1903ce67fa527a751c))
+
 ## [0.3.0](https://github.com/andremarques94/cinder-agent/compare/v0.2.0...v0.3.0) (2026-11-11)
 
 
