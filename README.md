@@ -160,9 +160,11 @@ curl -X DELETE -H "$A" $GW/admin/users/<id>
 ```
 
 `PUT …/github` links one more installation (`accountLogin` is the account it's on, used to pick
-it by repository owner); `DELETE …/github` unlinks them all. Deleting a user destroys their
-container, backup and sandbox state, and retires the sandbox name so it is never given to anyone
-else. Remove them from the Access policy too. The admin can also
+it by repository owner); `DELETE …/github` unlinks them all. Deleting a user stops their
+hostname, dashboard sign-in and GitHub tokens straight away, then destroys their container, every
+backup and their sandbox state, and retires the sandbox name so it is never given to anyone
+else. If it fails partway, send the same `DELETE` again to finish it. Remove them from the Access
+policy too. The admin can also
 pair, check or stop any sandbox with `POST /admin/sandboxes/<name>/pair`, `GET` and `DELETE
 /admin/sandboxes/<name>`.
 
