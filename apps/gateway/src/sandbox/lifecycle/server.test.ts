@@ -41,6 +41,8 @@ class FakeContainer implements SandboxContainer {
   running = false;
   readonly images = { opencode: "opencode" };
   starts = 0;
+  monitors = 0;
+  timeouts: number[] = [];
   private marker = false;
   private exited = Promise.withResolvers<void>();
 
@@ -58,6 +60,7 @@ class FakeContainer implements SandboxContainer {
   }
 
   monitor(): Promise<void> {
+    this.monitors++;
     return this.exited.promise;
   }
 
@@ -76,7 +79,14 @@ class FakeContainer implements SandboxContainer {
     };
   }
 
-  async setInactivityTimeout(): Promise<void> {}
+  async setInactivityTimeout(durationMs: number): Promise<void> {
+    this.timeouts.push(durationMs);
+  }
+
+  alreadyRunning(): void {
+    this.running = true;
+    this.marker = true;
+  }
 
   async exec(command: string[]): Promise<{ exitCode: Promise<number> }> {
     return { exitCode: Promise.resolve(this.run(command.join(" "))) };
@@ -87,6 +97,7 @@ class FakeContainer implements SandboxContainer {
       case Command.isReady.join(" "):
         return this.marker ? 0 : 1;
       case Command.markReady.join(" "):
+        this.events.push("marked ready");
         this.marker = true;
         return 0;
       case Command.pauseOpencode.join(" "):
@@ -183,7 +194,21 @@ describe("given a stopped sandbox", () => {
 
     await server.ensureReady();
 
-    expect(events).toEqual(["github intercepted", "container started", "restored"]);
+    expect(events).toEqual(["github intercepted", "container started", "restored", "marked ready"]);
+  });
+
+  test("when the restore is still running, then the ready marker isn't written yet", async () => {
+    const gate = new Gate();
+    const { server, events } = setup({ gates: { restore: gate } });
+    const start = server.ensureReady();
+    await reached(gate);
+
+    const beforeRestore = [...events];
+    gate.open();
+    await start;
+
+    expect(beforeRestore).not.toContain("marked ready");
+    expect(events.slice(-2)).toEqual(["restored", "marked ready"]);
   });
 
   test.each(["identity", "restore", "health"] as const)(
@@ -212,7 +237,7 @@ describe("given a stopped sandbox", () => {
     await expect(failed).rejects.toEqual(new GatewayError(ErrorCode.SandboxRestoreFailed));
     await server.ensureReady();
 
-    expect(events).toEqual(["github intercepted", "container started", "restored"]);
+    expect(events).toEqual(["github intercepted", "container started", "restored", "marked ready"]);
   });
 });
 
@@ -235,6 +260,7 @@ describe("given a running sandbox", () => {
       "github intercepted",
       "container started",
       "restored",
+      "marked ready",
     ]);
   });
 
@@ -332,5 +358,29 @@ describe("given a destroyed sandbox", () => {
 
     await expect(request).rejects.toMatchObject({ code: ErrorCode.NotFound });
     expect(restarted.container.starts).toBe(0);
+  });
+});
+
+describe("given a Durable Object that restarts", () => {
+  test("when its container is still running, then resume watches it, sets the timeout and intercepts GitHub without starting it", async () => {
+    const { server, container, events } = setup();
+    container.alreadyRunning();
+
+    await server.resume();
+
+    expect(container.starts).toBe(0);
+    expect(container.monitors).toBe(1);
+    expect(container.timeouts).toEqual([35 * 60_000]);
+    expect(events).toEqual(["github intercepted"]);
+  });
+
+  test("when its container is stopped, then resume does nothing", async () => {
+    const { server, container, events } = setup();
+
+    await server.resume();
+
+    expect(container.monitors).toBe(0);
+    expect(container.timeouts).toEqual([]);
+    expect(events).toEqual([]);
   });
 });
