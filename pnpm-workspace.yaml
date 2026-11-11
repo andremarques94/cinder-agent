@@ -15,6 +15,7 @@ catalog:
   vite: npm:@voidzero-dev/vite-plus-core@1.5.1
   vite-plus: 1.5.1
   wrangler: 4.158.0
+  "@octokit/auth-app": 8.3.1
 overrides:
   vite@*: "catalog:"
 peerDependencyRules:

@@ -12,9 +12,11 @@
     "SANDBOXES": "me",
     "OPENCODE_INSTANCE": "standard-1",
     "INACTIVITY_TIMEOUT_MINUTES": "30",
+    "GITHUB_APP_ID": "",
+    "GITHUB_INSTALLATION_ID": "",
   },
   "secrets": {
-    "required": ["ADMIN_TOKEN"],
+    "required": ["ADMIN_TOKEN", "GITHUB_APP_PRIVATE_KEY"],
   },
 
   "routes": [{ "pattern": "*.example.com/*", "zone_name": "example.com" }],

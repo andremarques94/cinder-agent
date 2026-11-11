@@ -3,6 +3,7 @@ import * as v from "valibot";
 
 import type { Config } from "@/config";
 import { ErrorCode, GatewayError } from "@/errors";
+import { GITHUB_HOSTS, githubApp, type GitIdentity } from "@/github";
 import { describeError, log } from "@/log";
 
 import type { Activity } from "./activity.ts";
@@ -16,7 +17,7 @@ const READY_POLL_INTERVAL_MS = 500;
 const INFO_TIMEOUT_MS = 2_000;
 const IDLE_CHECK_INTERVAL_MS = 60_000;
 
-export type ServerConfig = Pick<Config, "instance" | "inactivityTimeoutMs">;
+export type ServerConfig = Pick<Config, "instance" | "inactivityTimeoutMs" | "github">;
 
 export interface RunningServer {
   port: Fetcher;
@@ -113,10 +114,11 @@ export class OpencodeServer {
     if (!container.running) {
       this.ready = false;
       this.destroying = false;
+      const github = await this.connectGithub(container);
       container.start({
         image: container.images.opencode,
         instance: this.config.instance,
-        env: containerEnv(await this.loadPassword()),
+        env: containerEnv(await this.loadPassword(), github),
         // TODO(security): outbound allowlist instead (PLAN.md §3.1).
         enableInternet: true,
       });
@@ -149,6 +151,28 @@ export class OpencodeServer {
     throw new GatewayError(ErrorCode.SandboxStartTimeout, {
       details: { timeoutMs: STARTUP_DEADLINE_MS },
     });
+  }
+
+  private async connectGithub(
+    container: Container,
+  ): Promise<{ identity: GitIdentity | null } | null> {
+    const github = this.config.github;
+    if (!github) {
+      return null;
+    }
+    const outbound = this.ctx.exports.GithubOutbound({
+      props: { installationId: github.installationId },
+    });
+    for (const host of GITHUB_HOSTS) {
+      await container.interceptOutboundHttps(host, outbound);
+    }
+    const identity = await githubApp(github)
+      .botIdentity(github.installationId)
+      .catch((error: unknown) => {
+        log.warn("github_identity_failed", describeError(error));
+        return null;
+      });
+    return { identity };
   }
 
   private saveAndStop(reason: string): Promise<void> {

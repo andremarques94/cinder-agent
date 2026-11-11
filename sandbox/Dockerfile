@@ -3,7 +3,7 @@ FROM node:26-trixie-slim
 ARG OPENCODE_VERSION=2.2.7
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends bash ca-certificates curl git openssh-client ripgrep \
+  && apt-get install -y --no-install-recommends bash ca-certificates curl gh git openssh-client ripgrep \
   && rm -rf /var/lib/apt/lists/*
 
 RUN npm install --global --ignore-scripts "@opencode/cli-linux-x64-baseline@${OPENCODE_VERSION}" \

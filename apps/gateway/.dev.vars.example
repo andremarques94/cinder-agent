@@ -1,2 +1,6 @@
 SANDBOX_DOMAIN=localhost
 ADMIN_TOKEN=dev-admin-token-change-me
+# Optional, see "GitHub" in the README
+GITHUB_APP_ID=
+GITHUB_INSTALLATION_ID=
+GITHUB_APP_PRIVATE_KEY=
